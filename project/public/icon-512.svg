@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="40%" r="70%">
+      <stop offset="0%" stop-color="#1a1a2e"/>
+      <stop offset="100%" stop-color="#0a0a12"/>
+    </radialGradient>
+    <linearGradient id="ball" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffaa3a"/>
+      <stop offset="100%" stop-color="#ff6b1a"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+  <circle cx="256" cy="256" r="128" fill="url(#ball)" stroke="#ff3" stroke-width="5" opacity="0.95"/>
+  <path d="M256 138 L299 208 L373 213 L315 267 L336 341 L256 299 L176 341 L197 267 L139 213 L213 208 Z" fill="#1a1a2e" opacity="0.7"/>
+  <circle cx="256" cy="256" r="128" fill="none" stroke="#ff6b1a" stroke-width="4" opacity="0.4"/>
+  <text x="256" y="470" text-anchor="middle" font-family="Arial,sans-serif" font-size="48" font-weight="bold" fill="#ff6b1a">NINJA BALL</text>
+</svg>
