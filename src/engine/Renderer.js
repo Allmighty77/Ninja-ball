@@ -1,24 +1,27 @@
 // ════════════════════════════════════════════════════════════
-// MOTEUR 3D — Three.js cel-shaded — caméra sans alloc frame
+// MOTEUR 3D — Three.js cel-shaded — qualité production
 // ════════════════════════════════════════════════════════════
 import * as THREE from 'three'
-import { Settings } from '../Settings.js'
+import { getGraphicsPreset } from './GraphicsQuality.js'
 
 export class Renderer {
   constructor(canvas) {
     this.canvas = canvas
+    const preset = getGraphicsPreset()
+    this.preset = preset
+
     this.scene = new THREE.Scene()
     this.scene.background = new THREE.Color(0x0a0a18)
-    this.scene.fog = new THREE.FogExp2(0x0a0a18, 0.012)
+    this.scene.fog = new THREE.FogExp2(0x0a0a18, preset.fogDensity)
 
     this.camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.5, 280)
     this.camera.position.set(0, 16, 34)
     this.camera.lookAt(0, 1, 0)
 
-    const dpr = Math.min(window.devicePixelRatio || 1, 1.75)
+    const dpr = Math.min(window.devicePixelRatio || 1, preset.maxDpr)
     this.renderer = new THREE.WebGLRenderer({
       canvas,
-      antialias: dpr < 1.5,
+      antialias: preset.antialias && dpr < 1.5,
       powerPreference: 'high-performance',
       alpha: false,
     })
@@ -26,12 +29,9 @@ export class Renderer {
     this.renderer.setPixelRatio(dpr)
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
-    this.renderer.toneMappingExposure = 1.2
+    this.renderer.toneMappingExposure = preset.exposure
 
-    const cores = navigator.hardwareConcurrency || 4
-    const lowPower = cores < 4 || dpr > 1.5
-    const preferShadows = Settings.get('graphics.shadows', true)
-    this.shadowsEnabled = !lowPower && preferShadows
+    this.shadowsEnabled = preset.shadows
     if (this.shadowsEnabled) {
       this.renderer.shadowMap.enabled = true
       this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
@@ -40,7 +40,7 @@ export class Renderer {
     this._toonGradient = this._createToonGradient()
     this._matCache = new Map()
 
-    this._setupLights()
+    this._setupLights(preset)
 
     this.cameraTarget = new THREE.Vector3(0, 1, 0)
     this.cameraPos = new THREE.Vector3(0, 16, 34)
@@ -80,14 +80,15 @@ export class Renderer {
     return mat
   }
 
-  _setupLights() {
+  _setupLights(preset) {
     this.scene.add(new THREE.AmbientLight(0x3a3a55, 0.55))
 
     const moon = new THREE.DirectionalLight(0xb0c8ff, 1.15)
     moon.position.set(25, 45, 18)
     if (this.shadowsEnabled) {
       moon.castShadow = true
-      moon.shadow.mapSize.set(1024, 1024)
+      const res = preset.shadowMapSize || 1024
+      moon.shadow.mapSize.set(res, res)
       moon.shadow.camera.left = -40
       moon.shadow.camera.right = 40
       moon.shadow.camera.top = 40
