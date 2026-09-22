@@ -1,6 +1,5 @@
 // ════════════════════════════════════════════════════════════
-// MOTEUR 3D — Three.js cel-shaded (toon) — niveau AAA browser
-// Caméra cinématique, FOV dynamique, cache matériaux, ombres adaptatives
+// MOTEUR 3D — Three.js cel-shaded — caméra sans alloc frame
 // ════════════════════════════════════════════════════════════
 import * as THREE from 'three'
 import { Settings } from '../Settings.js'
@@ -12,12 +11,10 @@ export class Renderer {
     this.scene.background = new THREE.Color(0x0a0a18)
     this.scene.fog = new THREE.FogExp2(0x0a0a18, 0.012)
 
-    // Caméra
     this.camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.5, 280)
     this.camera.position.set(0, 16, 34)
     this.camera.lookAt(0, 1, 0)
 
-    // WebGL — high performance
     const dpr = Math.min(window.devicePixelRatio || 1, 1.75)
     this.renderer = new THREE.WebGLRenderer({
       canvas,
@@ -31,7 +28,6 @@ export class Renderer {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
     this.renderer.toneMappingExposure = 1.2
 
-    // Ombres adaptatives
     const cores = navigator.hardwareConcurrency || 4
     const lowPower = cores < 4 || dpr > 1.5
     const preferShadows = Settings.get('graphics.shadows', true)
@@ -41,19 +37,18 @@ export class Renderer {
       this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
     }
 
-    // Cache matériaux toon (évite GC)
     this._toonGradient = this._createToonGradient()
     this._matCache = new Map()
 
     this._setupLights()
 
-    // Caméra état
     this.cameraTarget = new THREE.Vector3(0, 1, 0)
     this.cameraPos = new THREE.Vector3(0, 16, 34)
     this.cameraShake = 0
     this.fovBase = 50
     this.fovPunch = 0
     this.lookAhead = new THREE.Vector3()
+    this._desiredTarget = new THREE.Vector3()
 
     this._resizeBound = () => this.onResize()
     window.addEventListener('resize', this._resizeBound)
@@ -73,7 +68,6 @@ export class Renderer {
     return tex
   }
 
-  // Matériau toon avec cache (même couleur = même instance)
   toonMaterial(color, opts = {}) {
     const key = `${color}_${opts.emissive || 0}_${opts.emissiveIntensity || 0}`
     if (this._matCache.has(key)) return this._matCache.get(key)
@@ -87,16 +81,13 @@ export class Renderer {
   }
 
   _setupLights() {
-    const ambient = new THREE.AmbientLight(0x3a3a55, 0.55)
-    this.scene.add(ambient)
+    this.scene.add(new THREE.AmbientLight(0x3a3a55, 0.55))
 
-    // Lune (directionnelle)
     const moon = new THREE.DirectionalLight(0xb0c8ff, 1.15)
     moon.position.set(25, 45, 18)
     if (this.shadowsEnabled) {
       moon.castShadow = true
-      const res = 1024
-      moon.shadow.mapSize.set(res, res)
+      moon.shadow.mapSize.set(1024, 1024)
       moon.shadow.camera.left = -40
       moon.shadow.camera.right = 40
       moon.shadow.camera.top = 40
@@ -108,15 +99,12 @@ export class Renderer {
     this.scene.add(moon)
     this.moon = moon
 
-    // Ambiance stade (orange)
     const stadium = new THREE.PointLight(0xff6b1a, 0.7, 90, 1.5)
     stadium.position.set(0, 18, 0)
     this.scene.add(stadium)
     this.stadiumLight = stadium
 
-    // Hémisphère
-    const hemi = new THREE.HemisphereLight(0x5a6aff, 0x1a1208, 0.35)
-    this.scene.add(hemi)
+    this.scene.add(new THREE.HemisphereLight(0x5a6aff, 0x1a1208, 0.35))
   }
 
   add(obj) {
@@ -127,24 +115,15 @@ export class Renderer {
     this.scene.remove(obj)
   }
 
-  /**
-   * Caméra cinématique style Rockstar / FIFA
-   * - damping doux
-   * - look-ahead sur la vitesse
-   * - FOV punch sur actions
-   * - shake décroissant
-   */
   updateCamera(targetPos, velocityHint, dt) {
-    // Cible avec look-ahead léger
     if (velocityHint) {
       this.lookAhead.copy(velocityHint).multiplyScalar(0.12)
     } else {
       this.lookAhead.set(0, 0, 0)
     }
-    const desiredTarget = targetPos.clone().add(this.lookAhead)
-    this.cameraTarget.lerp(desiredTarget, 1 - Math.exp(-5 * dt))
+    this._desiredTarget.copy(targetPos).add(this.lookAhead)
+    this.cameraTarget.lerp(this._desiredTarget, 1 - Math.exp(-5 * dt))
 
-    // Position caméra désirée (derrière / au-dessus)
     const desiredX = this.cameraTarget.x * 0.45
     const desiredZ = this.cameraTarget.z * 0.55 + 30
     const desiredY = 15 + Math.min(4, Math.abs(this.cameraTarget.z) * 0.04)
@@ -153,21 +132,16 @@ export class Renderer {
     this.cameraPos.z += (desiredZ - this.cameraPos.z) * (1 - Math.exp(-4 * dt))
     this.cameraPos.y += (desiredY - this.cameraPos.y) * (1 - Math.exp(-3 * dt))
 
-    // Screen shake (high-frequency, decaying)
-    let sx = 0, sy = 0
+    let sx = 0
+    let sy = 0
     if (this.cameraShake > 0.01) {
       sx = (Math.random() - 0.5) * this.cameraShake
       sy = (Math.random() - 0.5) * this.cameraShake * 0.6
       this.cameraShake *= Math.exp(-8 * dt)
     }
 
-    this.camera.position.set(
-      this.cameraPos.x + sx,
-      this.cameraPos.y + sy,
-      this.cameraPos.z,
-    )
+    this.camera.position.set(this.cameraPos.x + sx, this.cameraPos.y + sy, this.cameraPos.z)
 
-    // FOV punch (actions intenses)
     this.fovPunch = Math.max(0, this.fovPunch - dt * 25)
     this.camera.fov = this.fovBase + this.fovPunch
     this.camera.updateProjectionMatrix()
@@ -179,7 +153,6 @@ export class Renderer {
     this.cameraShake = Math.min(2.5, this.cameraShake + amount)
   }
 
-  // FOV punch court (tir, but, jutsu)
   punchFOV(amount = 6) {
     this.fovPunch = Math.min(12, this.fovPunch + amount)
   }
@@ -200,6 +173,7 @@ export class Renderer {
     window.removeEventListener('resize', this._resizeBound)
     this._matCache.forEach((m) => m.dispose())
     this._matCache.clear()
+    if (this._toonGradient) this._toonGradient.dispose()
     this.renderer.dispose()
   }
 }
