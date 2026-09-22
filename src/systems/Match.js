@@ -29,7 +29,6 @@ export class Match {
     this.renderer = new Renderer(this.canvas)
     this.physics = new Physics()
     this.input = new Input()
-    // audio est partagé
 
     // Entités
     this.stadium = new Stadium(this.renderer, this.physics)
@@ -128,7 +127,7 @@ export class Match {
       } else {
         // Tentative de vol si près de l'IA
         const dist = this.player.position.distanceTo(this.aiPlayer.position)
-        if (dist < 3 && this.aiPlayer.hasBall) {
+        if (dist < 3.2 && this.aiPlayer.hasBall) {
           this.aiPlayer.hasBall = false
           this.player.hasBall = true
           this.ball.lastOwner = this.player
@@ -162,7 +161,7 @@ export class Match {
     // Détection des buts
     this._checkGoal()
 
-    // Caméra suit le ballon
+    // Caméra suit le ballon + joueur
     const camTarget = new THREE.Vector3(
       (this.ball.position.x + this.player.position.x) / 2,
       1,
@@ -184,11 +183,11 @@ export class Match {
 
     // Si personne n'a le ballon et qu'un joueur est proche
     if (!this.player.hasBall && !this.aiPlayer.hasBall) {
-      if (this.ball.speed < 3) {
-        if (distP < 1.5 && distP < distA) {
+      if (this.ball.speed < 3.5) {
+        if (distP < 1.6 && distP < distA) {
           this.player.hasBall = true
           this.ball.lastOwner = this.player
-        } else if (distA < 1.5 && distA < distP) {
+        } else if (distA < 1.6 && distA < distP) {
           this.aiPlayer.hasBall = true
           this.ball.lastOwner = this.aiPlayer
         }
@@ -197,17 +196,18 @@ export class Match {
   }
 
   // Vérifie si un but est marqué
+  // Joueur (side 0) score en +Z, IA (side 1) score en -Z
   _checkGoal() {
     const bx = this.ball.position.x
     const bz = this.ball.position.z
     const by = this.ball.position.y
     const gw = FIELD.goalWidth / 2
 
-    // But côté gauche (Z négatif) — point pour l'IA (side 1)
+    // But côté -Z → point pour l'IA (side 1)
     if (bz < -FIELD.length / 2 + 0.5 && Math.abs(bx) < gw && by < FIELD.goalHeight) {
       this._onGoal(1)
     }
-    // But côté droit (Z positif) — point pour le joueur (side 0)
+    // But côté +Z → point pour le joueur (side 0)
     if (bz > FIELD.length / 2 - 0.5 && Math.abs(bx) < gw && by < FIELD.goalHeight) {
       this._onGoal(0)
     }
@@ -228,16 +228,24 @@ export class Match {
     // Particules de but
     this.player.effects.spawnGoalEffect(this.ball.position.clone())
 
-    // Reset
+    // Reset positions et états
     this.goalCooldown = 3.0
     this.player.hasBall = false
     this.aiPlayer.hasBall = false
     this.player.position.set(-8, 0, 0)
     this.aiPlayer.position.set(8, 0, 0)
+    this.player.group.position.copy(this.player.position)
+    this.aiPlayer.group.position.copy(this.aiPlayer.position)
+    this.player.facing.set(0, 0, 1)
+    this.aiPlayer.facing.set(0, 0, -1)
+    this.player.group.rotation.y = 0
+    this.aiPlayer.group.rotation.y = Math.PI
     this.player.stunned = 0
     this.aiPlayer.stunned = 0
+    this.player.velocity.set(0, 0, 0)
+    this.aiPlayer.velocity.set(0, 0, 0)
 
-    // Ballon au centre
+    // Ballon au centre après un délai
     setTimeout(() => {
       this.ball.reset(0)
     }, 1500)
