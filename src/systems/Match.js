@@ -1,6 +1,5 @@
 // ════════════════════════════════════════════════════════════
-// MATCH — Boucle AAA ultra-addictive
-// Combos, intensité, feedback constant, IA adaptative
+// MATCH — Boucle AAA + pause + difficulté + tutoriel
 // ════════════════════════════════════════════════════════════
 import * as THREE from 'three'
 import { Renderer } from '../engine/Renderer.js'
@@ -13,11 +12,20 @@ import { AI } from '../systems/AI.js'
 import { HUD } from '../systems/HUD.js'
 import { saveMatchResult } from '../data/db.js'
 
+const DIFFICULTY = {
+  easy: { aiThinkMul: 1.4, aiAggro: 0.35, playerChakraRegen: 10 },
+  normal: { aiThinkMul: 1.0, aiAggro: 0.65, playerChakraRegen: 8 },
+  hard: { aiThinkMul: 0.7, aiAggro: 0.9, playerChakraRegen: 7 },
+}
+
 export class Match {
-  constructor(playerChar, aiChar, audio) {
+  constructor(playerChar, aiChar, audio, opts = {}) {
     this.playerChar = playerChar
     this.aiChar = aiChar
     this.audio = audio
+    this.difficulty = opts.difficulty || 'normal'
+    this.showTutorial = !!opts.showTutorial
+    const diff = DIFFICULTY[this.difficulty] || DIFFICULTY.normal
 
     this.canvas = document.createElement('canvas')
     this.canvas.className = 'game-canvas'
@@ -31,26 +39,27 @@ export class Match {
     this.ball = new Ball(this.renderer, this.physics)
     this.player = new Player(playerChar, 0, this.renderer, this.physics, this.audio, this.stadium)
     this.aiPlayer = new Player(aiChar, 1, this.renderer, this.physics, this.audio, this.stadium)
-
-    try { this.player.loadCharacterModel(`/models/${playerChar.id}.glb`) } catch (e) {}
-    try { this.aiPlayer.loadCharacterModel(`/models/${aiChar.id}.glb`) } catch (e) {}
+    this.player.chakraRegen = diff.playerChakraRegen
 
     this.ai = new AI(this.aiPlayer, this.ball, this.player, this.stadium)
+    this.ai.aggression = diff.aiAggro
+    this._aiThinkMul = diff.aiThinkMul
 
     this.hud = new HUD()
     this.hud.mount(document.getElementById('app'))
     this.hud.updateScore(0, 0, playerChar.name, aiChar.name)
     this.hud.registerMobileInput(this.input)
+    if (this.showTutorial) this.hud.showTutorial()
 
     this.timeLeft = 120
     this.scoreL = 0
     this.scoreR = 0
     this.goalCooldown = 0
     this.gameOver = false
+    this.paused = false
     this.onEnd = null
     this.slowMo = 1.0
 
-    // Addiction systems
     this.combo = 0
     this.comboTimer = 0
     this.playerGoals = 0
@@ -65,6 +74,21 @@ export class Match {
     this._running = false
     this._camTarget = new THREE.Vector3()
     this._ballVel = new THREE.Vector3()
+
+    this._onKeyPause = (e) => {
+      if (e.code === 'Escape' || e.code === 'KeyP') {
+        e.preventDefault()
+        this.togglePause()
+      }
+    }
+    window.addEventListener('keydown', this._onKeyPause)
+  }
+
+  togglePause() {
+    if (this.gameOver || this.goalCooldown > 0) return
+    this.paused = !this.paused
+    this.hud.setPaused(this.paused)
+    if (!this.paused) this._lastTime = performance.now()
   }
 
   start() {
@@ -82,7 +106,7 @@ export class Match {
     const now = performance.now()
     const dt = Math.min(0.05, (now - this._lastTime) / 1000)
     this._lastTime = now
-    this.update(dt)
+    if (!this.paused) this.update(dt)
     this.renderer.render()
     requestAnimationFrame(this._loop)
   }
@@ -90,7 +114,6 @@ export class Match {
   update(dt) {
     if (this.gameOver) return
 
-    // Intensité dernière minute
     const intensity = this.timeLeft < 30 ? 1.08 : 1.0
     const effectiveDt = dt * this.slowMo * intensity
 
@@ -98,7 +121,6 @@ export class Match {
       this.slowMo = Math.min(1.0, this.slowMo + dt * 0.55)
     }
 
-    // Combo decay
     if (this.comboTimer > 0) {
       this.comboTimer -= dt
       if (this.comboTimer <= 0) this.combo = 0
@@ -129,11 +151,11 @@ export class Match {
 
     if (this.input.actions.shoot) {
       if (this.player.hasBall) {
+        // Player.shoot joue déjà le son — ne pas doubler
         this.player.shoot(this.ball, 1.0 + this.combo * 0.03, true)
         this._addCombo(1)
         this.renderer.punchFOV(5)
         this.renderer.addShake(0.35)
-        this.audio.play('shoot')
       } else {
         const dist = this.player.position.distanceTo(this.aiPlayer.position)
         if (dist < 3.3 && this.aiPlayer.hasBall) {
@@ -172,9 +194,10 @@ export class Match {
       }
     }
 
-    // IA reçoit l'écart de score (plus agressive si elle perd)
     const scoreDiff = this.scoreL - this.scoreR
-    this.ai.update(effectiveDt, scoreDiff)
+    // Ralentir le cerveau IA selon difficulté
+    this.ai.thinkTimer = Math.max(0, this.ai.thinkTimer)
+    this.ai.update(effectiveDt * this._aiThinkMul, scoreDiff)
 
     this._checkBallPossession()
 
@@ -312,6 +335,7 @@ export class Match {
 
   dispose() {
     this.stop()
+    window.removeEventListener('keydown', this._onKeyPause)
     this.input.dispose()
     this.hud.unmount()
     this.player.dispose()
