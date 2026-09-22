@@ -14,7 +14,16 @@ export const Settings = {
     } catch (e) {}
   },
   applyToAudio(audio) {
+    if (!audio) return
+    const muted = this.get('audio.muted', false)
     const vol = this.get('audio.volume', 0.4)
-    if (audio && audio.masterGain) audio.masterGain.gain.value = vol
-  }
+    if (typeof audio.setMuted === 'function') {
+      audio.setMuted(muted)
+    }
+    if (typeof audio.setVolume === 'function') {
+      if (!muted) audio.setVolume(vol)
+    } else if (audio.masterGain && !muted) {
+      audio.masterGain.gain.value = vol
+    }
+  },
 }
