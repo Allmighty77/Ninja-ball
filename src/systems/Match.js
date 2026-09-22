@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════
-// MATCH — Boucle AAA + pause + difficulté + tutoriel
+// MATCH — 1vIA ou 2 joueurs local + pause + difficulté + tutoriel
 // ════════════════════════════════════════════════════════════
 import * as THREE from 'three'
 import { Renderer } from '../engine/Renderer.js'
@@ -25,6 +25,7 @@ export class Match {
     this.audio = audio
     this.difficulty = opts.difficulty || 'normal'
     this.showTutorial = !!opts.showTutorial
+    this.mode = opts.mode === 'vsHuman' ? 'vsHuman' : 'vsAI'
     const diff = DIFFICULTY[this.difficulty] || DIFFICULTY.normal
 
     this.canvas = document.createElement('canvas')
@@ -34,22 +35,32 @@ export class Match {
     this.renderer = new Renderer(this.canvas)
     this.physics = new Physics()
     this.input = new Input()
+    this.input.setTwoPlayer(this.mode === 'vsHuman')
 
     this.stadium = new Stadium(this.renderer, this.physics)
     this.ball = new Ball(this.renderer, this.physics)
     this.player = new Player(playerChar, 0, this.renderer, this.physics, this.audio, this.stadium)
     this.aiPlayer = new Player(aiChar, 1, this.renderer, this.physics, this.audio, this.stadium)
     this.player.chakraRegen = diff.playerChakraRegen
+    this.aiPlayer.chakraRegen = diff.playerChakraRegen
 
-    this.ai = new AI(this.aiPlayer, this.ball, this.player, this.stadium)
-    this.ai.aggression = diff.aiAggro
-    this._aiThinkMul = diff.aiThinkMul
+    if (this.mode === 'vsAI') {
+      this.ai = new AI(this.aiPlayer, this.ball, this.player, this.stadium)
+      this.ai.aggression = diff.aiAggro
+      this._aiThinkMul = diff.aiThinkMul
+    } else {
+      this.ai = null
+      this._aiThinkMul = 1
+    }
 
     this.hud = new HUD()
     this.hud.mount(document.getElementById('app'))
     this.hud.updateScore(0, 0, playerChar.name, aiChar.name)
     this.hud.registerMobileInput(this.input)
     if (this.showTutorial) this.hud.showTutorial()
+    if (this.mode === 'vsHuman') {
+      this.hud.showTutorial?.() // message générique ok
+    }
 
     this.timeLeft = 120
     this.scoreL = 0
@@ -69,6 +80,9 @@ export class Match {
     this.maxCombo = 0
 
     this.audio.play('whistle')
+    try {
+      this.audio.startMusic()
+    } catch {}
 
     this._lastTime = performance.now()
     this._running = false
@@ -111,11 +125,64 @@ export class Match {
     requestAnimationFrame(this._loop)
   }
 
+  _handlePlayerActions(pl, actions, move, sprint, opponent, isP1) {
+    pl.move(move, this._effectiveDt, sprint)
+
+    if (actions.shoot) {
+      if (pl.hasBall) {
+        pl.shoot(this.ball, 1.0 + (isP1 ? this.combo * 0.03 : 0), true)
+        if (isP1) this._addCombo(1)
+        this.renderer.punchFOV(5)
+        this.renderer.addShake(0.35)
+      } else {
+        const dist = pl.position.distanceTo(opponent.position)
+        if (dist < 3.3 && opponent.hasBall) {
+          opponent.hasBall = false
+          pl.hasBall = true
+          this.ball.lastOwner = pl
+          if (isP1) {
+            this.steals++
+            this._addCombo(2)
+          }
+          this.audio.play('hit')
+          pl.effects.spawnBurst(opponent.position.clone(), 0xffff00, 18)
+          this.renderer.addShake(0.45)
+          this.renderer.punchFOV(4)
+        }
+      }
+    }
+    if (actions.dash) {
+      const ok = pl.dash({
+        x: move.x || pl.facing.x,
+        y: move.y || pl.facing.z,
+      })
+      if (ok && isP1) {
+        this._addCombo(1)
+        this.renderer.punchFOV(4)
+        this.renderer.addShake(0.25)
+      }
+    }
+    for (let i = 0; i < 3; i++) {
+      if (actions.jutsu[i]) {
+        const used = pl.useJutsu(i, this.ball, opponent)
+        if (used) {
+          if (isP1) {
+            this.jutsusUsed++
+            this._addCombo(2)
+          }
+          this.renderer.punchFOV(7)
+          this.renderer.addShake(0.5)
+        }
+      }
+    }
+  }
+
   update(dt) {
     if (this.gameOver) return
 
     const intensity = this.timeLeft < 30 ? 1.08 : 1.0
     const effectiveDt = dt * this.slowMo * intensity
+    this._effectiveDt = effectiveDt
 
     if (this.slowMo < 1.0) {
       this.slowMo = Math.min(1.0, this.slowMo + dt * 0.55)
@@ -147,57 +214,28 @@ export class Match {
 
     this.input.update()
 
-    this.player.move(this.input.move, effectiveDt, this.input.sprint)
+    this._handlePlayerActions(
+      this.player,
+      this.input.actions,
+      this.input.move,
+      this.input.sprint,
+      this.aiPlayer,
+      true,
+    )
 
-    if (this.input.actions.shoot) {
-      if (this.player.hasBall) {
-        // Player.shoot joue déjà le son — ne pas doubler
-        this.player.shoot(this.ball, 1.0 + this.combo * 0.03, true)
-        this._addCombo(1)
-        this.renderer.punchFOV(5)
-        this.renderer.addShake(0.35)
-      } else {
-        const dist = this.player.position.distanceTo(this.aiPlayer.position)
-        if (dist < 3.3 && this.aiPlayer.hasBall) {
-          this.aiPlayer.hasBall = false
-          this.player.hasBall = true
-          this.ball.lastOwner = this.player
-          this.steals++
-          this._addCombo(2)
-          this.audio.play('hit')
-          this.player.effects.spawnBurst(this.aiPlayer.position.clone(), 0xffff00, 18)
-          this.renderer.addShake(0.45)
-          this.renderer.punchFOV(4)
-        }
-      }
+    if (this.mode === 'vsHuman') {
+      this._handlePlayerActions(
+        this.aiPlayer,
+        this.input.actions2,
+        this.input.move2,
+        this.input.sprint2,
+        this.player,
+        false,
+      )
+    } else if (this.ai) {
+      const scoreDiff = this.scoreL - this.scoreR
+      this.ai.update(effectiveDt * this._aiThinkMul, scoreDiff)
     }
-    if (this.input.actions.dash) {
-      const ok = this.player.dash({
-        x: this.input.move.x || this.player.facing.x,
-        y: this.input.move.y || this.player.facing.z,
-      })
-      if (ok) {
-        this._addCombo(1)
-        this.renderer.punchFOV(4)
-        this.renderer.addShake(0.25)
-      }
-    }
-    for (let i = 0; i < 3; i++) {
-      if (this.input.actions.jutsu[i]) {
-        const used = this.player.useJutsu(i, this.ball, this.aiPlayer)
-        if (used) {
-          this.jutsusUsed++
-          this._addCombo(2)
-          this.renderer.punchFOV(7)
-          this.renderer.addShake(0.5)
-        }
-      }
-    }
-
-    const scoreDiff = this.scoreL - this.scoreR
-    // Ralentir le cerveau IA selon difficulté
-    this.ai.thinkTimer = Math.max(0, this.ai.thinkTimer)
-    this.ai.update(effectiveDt * this._aiThinkMul, scoreDiff)
 
     this._checkBallPossession()
 
@@ -313,11 +351,15 @@ export class Match {
   _endMatch() {
     this.gameOver = true
     this.audio.play('whistle')
+    try {
+      this.audio.stopMusic()
+    } catch {}
     const result = {
       scoreL: this.scoreL,
       scoreR: this.scoreR,
       playerChar: this.playerChar,
       aiChar: this.aiChar,
+      mode: this.mode,
       winner: this.scoreL > this.scoreR ? 'player' : this.scoreR > this.scoreL ? 'ai' : 'draw',
       stats: {
         playerGoals: this.playerGoals,
@@ -327,7 +369,9 @@ export class Match {
         maxCombo: this.maxCombo,
       },
     }
-    saveMatchResult(result, this.playerChar, this.aiChar)
+    if (this.mode === 'vsAI') {
+      saveMatchResult(result, this.playerChar, this.aiChar)
+    }
     setTimeout(() => {
       if (this.onEnd) this.onEnd(result)
     }, 1400)
@@ -335,6 +379,9 @@ export class Match {
 
   dispose() {
     this.stop()
+    try {
+      this.audio.stopMusic()
+    } catch {}
     window.removeEventListener('keydown', this._onKeyPause)
     this.input.dispose()
     this.hud.unmount()
