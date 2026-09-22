@@ -1,6 +1,5 @@
 // ════════════════════════════════════════════════════════════
-// AUDIO — Web Audio API
-// SFX synthétisés + musique d'ambiance loop + mute
+// AUDIO — Web Audio API + mute fiable + musique loop
 // ════════════════════════════════════════════════════════════
 
 export class AudioEngine {
@@ -8,6 +7,7 @@ export class AudioEngine {
     this.ctx = null
     this.enabled = false
     this.muted = false
+    this._volume = 0.4
     this.masterGain = null
     this.sfxGain = null
     this.musicGain = null
@@ -22,7 +22,7 @@ export class AudioEngine {
     try {
       this.ctx = new (window.AudioContext || window.webkitAudioContext)()
       this.masterGain = this.ctx.createGain()
-      this.masterGain.gain.value = 0.4
+      this.masterGain.gain.value = this.muted ? 0 : this._volume
       this.masterGain.connect(this.ctx.destination)
 
       this.sfxGain = this.ctx.createGain()
@@ -48,13 +48,17 @@ export class AudioEngine {
   setMuted(muted) {
     this.muted = !!muted
     if (this.masterGain) {
-      this.masterGain.gain.value = this.muted ? 0 : 0.4
+      this.masterGain.gain.value = this.muted ? 0 : this._volume
+    }
+    if (this.muted) {
+      this.stopMusic()
     }
   }
 
   setVolume(vol) {
+    this._volume = Math.max(0, Math.min(1, vol))
     if (this.masterGain && !this.muted) {
-      this.masterGain.gain.value = Math.max(0, Math.min(1, vol))
+      this.masterGain.gain.value = this._volume
     }
   }
 
@@ -79,14 +83,12 @@ export class AudioEngine {
     }
   }
 
-  /** Musique d'ambiance minimaliste (pad + pulse) — démarre une seule fois */
   startMusic() {
-    if (!this.enabled || !this.ctx || this._musicPlaying) return
+    if (!this.enabled || !this.ctx || this._musicPlaying || this.muted) return
     this._musicPlaying = true
     const ctx = this.ctx
     const now = ctx.currentTime
 
-    // Pad grave
     const osc1 = ctx.createOscillator()
     const g1 = ctx.createGain()
     osc1.type = 'sine'
@@ -96,7 +98,6 @@ export class AudioEngine {
     g1.connect(this.musicGain)
     osc1.start(now)
 
-    // Pad aigu léger
     const osc2 = ctx.createOscillator()
     const g2 = ctx.createGain()
     osc2.type = 'triangle'
@@ -106,7 +107,6 @@ export class AudioEngine {
     g2.connect(this.musicGain)
     osc2.start(now)
 
-    // LFO volume pour respiration
     const lfo = ctx.createOscillator()
     const lfoGain = ctx.createGain()
     lfo.frequency.value = 0.08
@@ -180,8 +180,7 @@ export class AudioEngine {
         break
       }
       case 'goal': {
-        const notes = [523, 659, 784, 1047]
-        notes.forEach((freq, i) => {
+        ;[523, 659, 784, 1047].forEach((freq, i) => {
           const osc = ctx.createOscillator()
           const g = ctx.createGain()
           osc.type = 'square'
