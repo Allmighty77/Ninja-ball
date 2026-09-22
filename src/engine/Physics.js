@@ -1,6 +1,5 @@
 // ════════════════════════════════════════════════════════════
 // MOTEUR PHYSIQUE — Cannon-es — timestep fixe (60 Hz)
-// Sensation stable type console / AAA
 // ════════════════════════════════════════════════════════════
 import * as CANNON from 'cannon-es'
 
@@ -74,10 +73,6 @@ export class Physics {
     return body
   }
 
-  /**
-   * Step avec accumulateur (timestep fixe 60 Hz)
-   * Évite le jitter et les explosions de physique
-   */
   step(dt) {
     this._accumulator += Math.min(dt, 0.05)
     let steps = 0
@@ -89,6 +84,11 @@ export class Physics {
   }
 
   dispose() {
+    const bodies = [...this.world.bodies]
+    for (const b of bodies) {
+      this.world.removeBody(b)
+    }
+    this.walls = []
     this.world.clearForces()
   }
 }
