@@ -1,6 +1,6 @@
 // ════════════════════════════════════════════════════════════
-// MATCH — Boucle AAA (timestep fixe + rendu découplé)
-// Sensation fluide type console / Rockstar browser
+// MATCH — Boucle AAA ultra-addictive
+// Combos, intensité, feedback constant, IA adaptative
 // ════════════════════════════════════════════════════════════
 import * as THREE from 'three'
 import { Renderer } from '../engine/Renderer.js'
@@ -50,6 +50,15 @@ export class Match {
     this.onEnd = null
     this.slowMo = 1.0
 
+    // Addiction systems
+    this.combo = 0
+    this.comboTimer = 0
+    this.playerGoals = 0
+    this.aiGoals = 0
+    this.steals = 0
+    this.jutsusUsed = 0
+    this.maxCombo = 0
+
     this.audio.play('whistle')
 
     this._lastTime = performance.now()
@@ -71,10 +80,8 @@ export class Match {
   _loop = () => {
     if (!this._running) return
     const now = performance.now()
-    // Cap dt pour éviter les freezes après tab switch
     const dt = Math.min(0.05, (now - this._lastTime) / 1000)
     this._lastTime = now
-
     this.update(dt)
     this.renderer.render()
     requestAnimationFrame(this._loop)
@@ -83,9 +90,18 @@ export class Match {
   update(dt) {
     if (this.gameOver) return
 
-    const effectiveDt = dt * this.slowMo
+    // Intensité dernière minute
+    const intensity = this.timeLeft < 30 ? 1.08 : 1.0
+    const effectiveDt = dt * this.slowMo * intensity
+
     if (this.slowMo < 1.0) {
       this.slowMo = Math.min(1.0, this.slowMo + dt * 0.55)
+    }
+
+    // Combo decay
+    if (this.comboTimer > 0) {
+      this.comboTimer -= dt
+      if (this.comboTimer <= 0) this.combo = 0
     }
 
     this.timeLeft -= dt
@@ -95,7 +111,6 @@ export class Match {
       return
     }
 
-    // Cooldown but — freeze partiel
     if (this.goalCooldown > 0) {
       this.goalCooldown -= dt
       this.physics.step(effectiveDt)
@@ -104,6 +119,7 @@ export class Match {
       this._camTarget.set(0, 1.2, 0)
       this.renderer.updateCamera(this._camTarget, null, dt)
       this.hud.updateTimer(this.timeLeft)
+      this.hud.updateCombo(this.combo)
       return
     }
 
@@ -113,19 +129,23 @@ export class Match {
 
     if (this.input.actions.shoot) {
       if (this.player.hasBall) {
-        this.player.shoot(this.ball, 1.0, true)
+        this.player.shoot(this.ball, 1.0 + this.combo * 0.03, true)
+        this._addCombo(1)
         this.renderer.punchFOV(5)
         this.renderer.addShake(0.35)
+        this.audio.play('shoot')
       } else {
         const dist = this.player.position.distanceTo(this.aiPlayer.position)
-        if (dist < 3.2 && this.aiPlayer.hasBall) {
+        if (dist < 3.3 && this.aiPlayer.hasBall) {
           this.aiPlayer.hasBall = false
           this.player.hasBall = true
           this.ball.lastOwner = this.player
+          this.steals++
+          this._addCombo(2)
           this.audio.play('hit')
-          this.player.effects.spawnBurst(this.aiPlayer.position.clone(), 0xffff00, 16)
-          this.renderer.addShake(0.4)
-          this.renderer.punchFOV(3)
+          this.player.effects.spawnBurst(this.aiPlayer.position.clone(), 0xffff00, 18)
+          this.renderer.addShake(0.45)
+          this.renderer.punchFOV(4)
         }
       }
     }
@@ -135,6 +155,7 @@ export class Match {
         y: this.input.move.y || this.player.facing.z,
       })
       if (ok) {
+        this._addCombo(1)
         this.renderer.punchFOV(4)
         this.renderer.addShake(0.25)
       }
@@ -143,13 +164,17 @@ export class Match {
       if (this.input.actions.jutsu[i]) {
         const used = this.player.useJutsu(i, this.ball, this.aiPlayer)
         if (used) {
-          this.renderer.punchFOV(6)
-          this.renderer.addShake(0.45)
+          this.jutsusUsed++
+          this._addCombo(2)
+          this.renderer.punchFOV(7)
+          this.renderer.addShake(0.5)
         }
       }
     }
 
-    this.ai.update(effectiveDt)
+    // IA reçoit l'écart de score (plus agressive si elle perd)
+    const scoreDiff = this.scoreL - this.scoreR
+    this.ai.update(effectiveDt, scoreDiff)
 
     this._checkBallPossession()
 
@@ -161,22 +186,28 @@ export class Match {
 
     this._checkGoal()
 
-    // Caméra cinématique : cible entre ballon et joueur + look-ahead vitesse ballon
     this._camTarget.set(
       this.ball.position.x * 0.55 + this.player.position.x * 0.45,
       1.1,
       this.ball.position.z * 0.55 + this.player.position.z * 0.45,
     )
-    this._ballVel.set(
-      this.ball.velocity.x,
-      0,
-      this.ball.velocity.z,
-    )
+    this._ballVel.set(this.ball.velocity.x, 0, this.ball.velocity.z)
     this.renderer.updateCamera(this._camTarget, this._ballVel, dt)
 
     this.hud.updateTimer(this.timeLeft)
     this.hud.updateChakra(this.player.chakra, this.player.chakraMax)
     this.hud.updateJutsu(this.player.character, this.player.cooldowns, this.player.chakra)
+    this.hud.updateCombo(this.combo)
+  }
+
+  _addCombo(n) {
+    this.combo += n
+    this.comboTimer = 3.5
+    if (this.combo > this.maxCombo) this.maxCombo = this.combo
+    if (this.combo >= 5 && this.combo % 5 === 0) {
+      this.audio.play('select')
+      this.renderer.punchFOV(3)
+    }
   }
 
   _checkBallPossession() {
@@ -185,11 +216,11 @@ export class Match {
     const distA = this.aiPlayer.position.distanceTo(ballPos)
 
     if (!this.player.hasBall && !this.aiPlayer.hasBall) {
-      if (this.ball.speed < 3.8) {
-        if (distP < 1.65 && distP <= distA) {
+      if (this.ball.speed < 4.0) {
+        if (distP < 1.7 && distP <= distA) {
           this.player.hasBall = true
           this.ball.lastOwner = this.player
-        } else if (distA < 1.65 && distA < distP) {
+        } else if (distA < 1.7 && distA < distP) {
           this.aiPlayer.hasBall = true
           this.ball.lastOwner = this.aiPlayer
         }
@@ -213,22 +244,29 @@ export class Match {
 
   _onGoal(scorerSide) {
     if (this.goalCooldown > 0) return
-    if (scorerSide === 0) this.scoreL++
-    else this.scoreR++
+    if (scorerSide === 0) {
+      this.scoreL++
+      this.playerGoals++
+      this._addCombo(5)
+    } else {
+      this.scoreR++
+      this.aiGoals++
+      this.combo = 0
+    }
 
     const scorerName = scorerSide === 0 ? this.playerChar.name : this.aiChar.name
     this.hud.updateScore(this.scoreL, this.scoreR, this.playerChar.name, this.aiChar.name)
-    this.hud.showGoal(scorerName)
+    this.hud.showGoal(scorerName, scorerSide === 0 ? this.combo : 0)
     this.audio.play('goal')
-    this.renderer.addShake(2.2)
-    this.renderer.punchFOV(10)
-    this.slowMo = 0.18
+    this.renderer.addShake(2.4)
+    this.renderer.punchFOV(12)
+    this.slowMo = 0.15
 
     this.player.effects.spawnGoalEffect(
       new THREE.Vector3(this.ball.position.x, this.ball.position.y, this.ball.position.z),
     )
 
-    this.goalCooldown = 3.0
+    this.goalCooldown = 2.8
     this.player.hasBall = false
     this.aiPlayer.hasBall = false
     this.player.position.set(-8, 0, 0)
@@ -246,7 +284,7 @@ export class Match {
 
     setTimeout(() => {
       this.ball.reset(0)
-    }, 1400)
+    }, 1300)
   }
 
   _endMatch() {
@@ -258,11 +296,18 @@ export class Match {
       playerChar: this.playerChar,
       aiChar: this.aiChar,
       winner: this.scoreL > this.scoreR ? 'player' : this.scoreR > this.scoreL ? 'ai' : 'draw',
+      stats: {
+        playerGoals: this.playerGoals,
+        aiGoals: this.aiGoals,
+        steals: this.steals,
+        jutsusUsed: this.jutsusUsed,
+        maxCombo: this.maxCombo,
+      },
     }
     saveMatchResult(result, this.playerChar, this.aiChar)
     setTimeout(() => {
       if (this.onEnd) this.onEnd(result)
-    }, 1500)
+    }, 1400)
   }
 
   dispose() {
