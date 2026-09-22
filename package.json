@@ -1,8 +1,9 @@
 {
   "name": "ninja-ball-ultimate-clash",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.5.0",
   "type": "module",
+  "description": "Ninja Ball — Ultimate Clash : football ninja 3D browser (VS IA / 2 joueurs)",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
