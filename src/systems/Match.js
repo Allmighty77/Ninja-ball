@@ -1,12 +1,11 @@
 // ════════════════════════════════════════════════════════════
-// MATCH — Logique de partie (durée, score, buts, possession)
-// Gère la boucle de jeu, le chrono, les événements de but
+// MATCH — Boucle AAA (timestep fixe + rendu découplé)
+// Sensation fluide type console / Rockstar browser
 // ════════════════════════════════════════════════════════════
 import * as THREE from 'three'
 import { Renderer } from '../engine/Renderer.js'
 import { Physics } from '../engine/Physics.js'
 import { Input } from '../engine/Input.js'
-import { AudioEngine } from '../engine/Audio.js'
 import { Stadium, FIELD } from '../entities/Stadium.js'
 import { Ball } from '../entities/Ball.js'
 import { Player } from '../entities/Player.js'
@@ -20,38 +19,30 @@ export class Match {
     this.aiChar = aiChar
     this.audio = audio
 
-    // Canvas Three.js
     this.canvas = document.createElement('canvas')
     this.canvas.className = 'game-canvas'
     document.getElementById('app').appendChild(this.canvas)
 
-    // Moteurs
     this.renderer = new Renderer(this.canvas)
     this.physics = new Physics()
     this.input = new Input()
 
-    // Entités
     this.stadium = new Stadium(this.renderer, this.physics)
     this.ball = new Ball(this.renderer, this.physics)
     this.player = new Player(playerChar, 0, this.renderer, this.physics, this.audio, this.stadium)
     this.aiPlayer = new Player(aiChar, 1, this.renderer, this.physics, this.audio, this.stadium)
-    // Try to load optional custom models from /models/<id>.glb
-    try {
-      this.player.loadCharacterModel(`/models/${playerChar.id}.glb`)
-    } catch (e) {}
-    try {
-      this.aiPlayer.loadCharacterModel(`/models/${aiChar.id}.glb`)
-    } catch (e) {}
+
+    try { this.player.loadCharacterModel(`/models/${playerChar.id}.glb`) } catch (e) {}
+    try { this.aiPlayer.loadCharacterModel(`/models/${aiChar.id}.glb`) } catch (e) {}
+
     this.ai = new AI(this.aiPlayer, this.ball, this.player, this.stadium)
 
-    // HUD
     this.hud = new HUD()
     this.hud.mount(document.getElementById('app'))
     this.hud.updateScore(0, 0, playerChar.name, aiChar.name)
     this.hud.registerMobileInput(this.input)
 
-    // État du match
-    this.timeLeft = 120 // 2 minutes
+    this.timeLeft = 120
     this.scoreL = 0
     this.scoreR = 0
     this.goalCooldown = 0
@@ -59,15 +50,17 @@ export class Match {
     this.onEnd = null
     this.slowMo = 1.0
 
-    // Sifflet de début
     this.audio.play('whistle')
 
     this._lastTime = performance.now()
     this._running = false
+    this._camTarget = new THREE.Vector3()
+    this._ballVel = new THREE.Vector3()
   }
 
   start() {
     this._running = true
+    this._lastTime = performance.now()
     this._loop()
   }
 
@@ -78,23 +71,23 @@ export class Match {
   _loop = () => {
     if (!this._running) return
     const now = performance.now()
-    const dt = Math.min(0.033, (now - this._lastTime) / 1000)
+    // Cap dt pour éviter les freezes après tab switch
+    const dt = Math.min(0.05, (now - this._lastTime) / 1000)
     this._lastTime = now
+
     this.update(dt)
-    this.renderer.render(dt)
+    this.renderer.render()
     requestAnimationFrame(this._loop)
   }
 
   update(dt) {
     if (this.gameOver) return
 
-    // Slow-mo
     const effectiveDt = dt * this.slowMo
     if (this.slowMo < 1.0) {
-      this.slowMo = Math.min(1.0, this.slowMo + dt * 0.5)
+      this.slowMo = Math.min(1.0, this.slowMo + dt * 0.55)
     }
 
-    // Chrono
     this.timeLeft -= dt
     if (this.timeLeft <= 0) {
       this.timeLeft = 0
@@ -102,92 +95,101 @@ export class Match {
       return
     }
 
-    // Cooldown de but (reset)
+    // Cooldown but — freeze partiel
     if (this.goalCooldown > 0) {
       this.goalCooldown -= dt
-      // Pendant le cooldown, on gèle les contrôles
       this.physics.step(effectiveDt)
       this.ball.update(effectiveDt)
       this.stadium.update(effectiveDt, performance.now() / 1000)
-      this.renderer.updateCamera(new THREE.Vector3(0, 1, 0), dt)
+      this._camTarget.set(0, 1.2, 0)
+      this.renderer.updateCamera(this._camTarget, null, dt)
       this.hud.updateTimer(this.timeLeft)
       return
     }
 
-    // Entrées
     this.input.update()
 
-    // Joueur humain
     this.player.move(this.input.move, effectiveDt, this.input.sprint)
 
-    // Actions du joueur
     if (this.input.actions.shoot) {
       if (this.player.hasBall) {
         this.player.shoot(this.ball, 1.0, true)
+        this.renderer.punchFOV(5)
+        this.renderer.addShake(0.35)
       } else {
-        // Tentative de vol si près de l'IA
         const dist = this.player.position.distanceTo(this.aiPlayer.position)
         if (dist < 3.2 && this.aiPlayer.hasBall) {
           this.aiPlayer.hasBall = false
           this.player.hasBall = true
           this.ball.lastOwner = this.player
           this.audio.play('hit')
-          this.player.effects.spawnBurst(this.aiPlayer.position.clone(), 0xffff00, 15)
+          this.player.effects.spawnBurst(this.aiPlayer.position.clone(), 0xffff00, 16)
+          this.renderer.addShake(0.4)
+          this.renderer.punchFOV(3)
         }
       }
     }
     if (this.input.actions.dash) {
-      this.player.dash({ x: this.input.move.x || this.player.facing.x, y: this.input.move.y || this.player.facing.z })
+      const ok = this.player.dash({
+        x: this.input.move.x || this.player.facing.x,
+        y: this.input.move.y || this.player.facing.z,
+      })
+      if (ok) {
+        this.renderer.punchFOV(4)
+        this.renderer.addShake(0.25)
+      }
     }
     for (let i = 0; i < 3; i++) {
       if (this.input.actions.jutsu[i]) {
-        this.player.useJutsu(i, this.ball, this.aiPlayer)
+        const used = this.player.useJutsu(i, this.ball, this.aiPlayer)
+        if (used) {
+          this.renderer.punchFOV(6)
+          this.renderer.addShake(0.45)
+        }
       }
     }
 
-    // IA
     this.ai.update(effectiveDt)
 
-    // Détection de possession du ballon
-    this._checkBallPossession(effectiveDt)
+    this._checkBallPossession()
 
-    // Mise à jour des entités
     this.player.update(effectiveDt, this.ball)
     this.aiPlayer.update(effectiveDt, this.ball)
     this.physics.step(effectiveDt)
     this.ball.update(effectiveDt)
     this.stadium.update(effectiveDt, performance.now() / 1000)
 
-    // Détection des buts
     this._checkGoal()
 
-    // Caméra suit le ballon + joueur
-    const camTarget = new THREE.Vector3(
-      (this.ball.position.x + this.player.position.x) / 2,
-      1,
-      (this.ball.position.z + this.player.position.z) / 2,
+    // Caméra cinématique : cible entre ballon et joueur + look-ahead vitesse ballon
+    this._camTarget.set(
+      this.ball.position.x * 0.55 + this.player.position.x * 0.45,
+      1.1,
+      this.ball.position.z * 0.55 + this.player.position.z * 0.45,
     )
-    this.renderer.updateCamera(camTarget, dt)
+    this._ballVel.set(
+      this.ball.velocity.x,
+      0,
+      this.ball.velocity.z,
+    )
+    this.renderer.updateCamera(this._camTarget, this._ballVel, dt)
 
-    // HUD
     this.hud.updateTimer(this.timeLeft)
     this.hud.updateChakra(this.player.chakra, this.player.chakraMax)
     this.hud.updateJutsu(this.player.character, this.player.cooldowns, this.player.chakra)
   }
 
-  // Vérifie qui possède le ballon
-  _checkBallPossession(dt) {
+  _checkBallPossession() {
     const ballPos = new THREE.Vector3(this.ball.position.x, 0, this.ball.position.z)
     const distP = this.player.position.distanceTo(ballPos)
     const distA = this.aiPlayer.position.distanceTo(ballPos)
 
-    // Si personne n'a le ballon et qu'un joueur est proche
     if (!this.player.hasBall && !this.aiPlayer.hasBall) {
-      if (this.ball.speed < 3.5) {
-        if (distP < 1.6 && distP < distA) {
+      if (this.ball.speed < 3.8) {
+        if (distP < 1.65 && distP <= distA) {
           this.player.hasBall = true
           this.ball.lastOwner = this.player
-        } else if (distA < 1.6 && distA < distP) {
+        } else if (distA < 1.65 && distA < distP) {
           this.aiPlayer.hasBall = true
           this.ball.lastOwner = this.aiPlayer
         }
@@ -195,19 +197,15 @@ export class Match {
     }
   }
 
-  // Vérifie si un but est marqué
-  // Joueur (side 0) score en +Z, IA (side 1) score en -Z
   _checkGoal() {
     const bx = this.ball.position.x
     const bz = this.ball.position.z
     const by = this.ball.position.y
     const gw = FIELD.goalWidth / 2
 
-    // But côté -Z → point pour l'IA (side 1)
     if (bz < -FIELD.length / 2 + 0.5 && Math.abs(bx) < gw && by < FIELD.goalHeight) {
       this._onGoal(1)
     }
-    // But côté +Z → point pour le joueur (side 0)
     if (bz > FIELD.length / 2 - 0.5 && Math.abs(bx) < gw && by < FIELD.goalHeight) {
       this._onGoal(0)
     }
@@ -222,13 +220,14 @@ export class Match {
     this.hud.updateScore(this.scoreL, this.scoreR, this.playerChar.name, this.aiChar.name)
     this.hud.showGoal(scorerName)
     this.audio.play('goal')
-    this.renderer.addShake(2.0)
-    this.slowMo = 0.2
+    this.renderer.addShake(2.2)
+    this.renderer.punchFOV(10)
+    this.slowMo = 0.18
 
-    // Particules de but
-    this.player.effects.spawnGoalEffect(this.ball.position.clone())
+    this.player.effects.spawnGoalEffect(
+      new THREE.Vector3(this.ball.position.x, this.ball.position.y, this.ball.position.z),
+    )
 
-    // Reset positions et états
     this.goalCooldown = 3.0
     this.player.hasBall = false
     this.aiPlayer.hasBall = false
@@ -245,10 +244,9 @@ export class Match {
     this.player.velocity.set(0, 0, 0)
     this.aiPlayer.velocity.set(0, 0, 0)
 
-    // Ballon au centre après un délai
     setTimeout(() => {
       this.ball.reset(0)
-    }, 1500)
+    }, 1400)
   }
 
   _endMatch() {
@@ -261,7 +259,6 @@ export class Match {
       aiChar: this.aiChar,
       winner: this.scoreL > this.scoreR ? 'player' : this.scoreR > this.scoreL ? 'ai' : 'draw',
     }
-    // Sauvegarde le résultat en base de données (asynchrone, non bloquant)
     saveMatchResult(result, this.playerChar, this.aiChar)
     setTimeout(() => {
       if (this.onEnd) this.onEnd(result)
