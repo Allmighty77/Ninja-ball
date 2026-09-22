@@ -26,6 +26,22 @@ npm run preview
 
 ---
 
+## ✨ Nouveautés (v1.1)
+
+- **Personnages low-poly stylisés complets** : corps, bras, jambes, veste, pantalon, bandeau, cheveux uniques par ninja
+  - Naruto : cheveux jaunes hérissés + veste orange
+  - Sasuke : cheveux noirs pointus + veste bleue
+  - Sakura : cheveux roses courts + veste rose
+  - Kakashi : cheveux argentés + masque + veste grise
+- **Animations de course / idle** (jambes + bras)
+- **Bugs critiques corrigés** :
+  - Direction des buts (joueur score en +Z, IA en -Z)
+  - Calcul de direction de tir
+  - IA qui visait le mauvais but
+  - Reset propre après un but
+
+---
+
 ## 🎯 Contrôles
 
 ### Desktop (clavier)
@@ -71,7 +87,7 @@ npm run preview
 
 ### Modèles 3D `.glb`
 
-Les joueurs sont actuellement des **capsules colorées** (placeholders procéduraux). Pour remplacer par vos modèles :
+Les joueurs sont maintenant des **personnages low-poly stylisés**. Pour remplacer par vos propres modèles :
 
 1. Placez vos fichiers `.glb` dans `public/models/`
 2. Dans `src/entities/Player.js`, la fonction `loadCharacterModel(url)` est déjà prête :
@@ -141,7 +157,7 @@ src/
 ├── entities/
 │   ├── Stadium.js          # Stade cel-shaded + ciel + lune + sceau
 │   ├── Ball.js             # Ballon physique + traînée de chakra
-│   ├── Player.js           # Capsule ninja + déplacement + jutsu + chakra
+│   ├── Player.js           # Personnage ninja low-poly + déplacement + jutsu + chakra
 │   └── Effects.js          # Particules, auras, sceaux, trails
 ├── systems/
 │   ├── AI.js               # IA adverse (poursuite, tir, jutsu)
