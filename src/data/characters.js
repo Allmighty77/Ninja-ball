@@ -75,7 +75,7 @@ export const CHARACTERS = [
         id: 'sharingan_read',
         name: 'Sharingan Read',
         cost: 50,
-       cooldown: 6.0,
+        cooldown: 6.0,
         type: 'slowmo',
         description: 'Ralentit l\'adversaire (slow-mo)',
       },
