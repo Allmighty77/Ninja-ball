@@ -1,6 +1,5 @@
 // ════════════════════════════════════════════════════════════
-// HUD — Interface de jeu (score, chrono, chakra, jutsu, mobile)
-// HUD hybride : style FIFA + style Naruto Storm
+// HUD — FIFA + Naruto Storm + Combo addictif
 // ════════════════════════════════════════════════════════════
 
 export class HUD {
@@ -10,6 +9,7 @@ export class HUD {
     this._buildScoreboard()
     this._buildChakraGauge()
     this._buildJutsuButtons()
+    this._buildCombo()
     this._buildMobileControls()
     this._buildGoalOverlay()
   }
@@ -37,7 +37,6 @@ export class HUD {
   _buildChakraGauge() {
     this.chakraWrap = document.createElement('div')
     this.chakraWrap.className = 'hud-chakra'
-    // SVG jauge incurvée lumineuse
     this.chakraWrap.innerHTML = `
       <svg viewBox="0 0 120 70" class="chakra-svg">
         <defs>
@@ -77,6 +76,21 @@ export class HUD {
     this.root.appendChild(this.jutsuWrap)
   }
 
+  _buildCombo() {
+    this.comboEl = document.createElement('div')
+    this.comboEl.className = 'hud-combo'
+    this.comboEl.id = 'hudCombo'
+    this.comboEl.style.cssText = `
+      position:absolute; top:22%; left:50%; transform:translateX(-50%);
+      font-size:28px; font-weight:900; color:#ff6b1a;
+      text-shadow:0 0 12px #ff6b1a, 0 2px 4px #000;
+      opacity:0; transition:opacity 0.15s, transform 0.15s;
+      pointer-events:none; letter-spacing:2px; z-index:20;
+    `
+    this.comboEl.textContent = ''
+    this.root.appendChild(this.comboEl)
+  }
+
   _buildMobileControls() {
     this.mobileWrap = document.createElement('div')
     this.mobileWrap.className = 'hud-mobile'
@@ -102,6 +116,7 @@ export class HUD {
     this.goalOverlay.innerHTML = `
       <div class="goal-text">BUT !</div>
       <div class="goal-sub" id="goalSub"></div>
+      <div class="goal-combo" id="goalCombo" style="font-size:18px;margin-top:8px;opacity:0.9"></div>
     `
     this.root.appendChild(this.goalOverlay)
   }
@@ -114,45 +129,43 @@ export class HUD {
     if (this.root.parentElement) this.root.parentElement.removeChild(this.root)
   }
 
-  // Met à jour le scoreboard
   updateScore(scoreL, scoreR, nameL, nameR) {
-    document.getElementById('sbScoreL').textContent = scoreL
-    document.getElementById('sbScoreR').textContent = scoreR
-    document.getElementById('sbNameL').textContent = nameL
-    document.getElementById('sbNameR').textContent = nameR
+    const el = (id) => document.getElementById(id)
+    if (el('sbScoreL')) el('sbScoreL').textContent = scoreL
+    if (el('sbScoreR')) el('sbScoreR').textContent = scoreR
+    if (el('sbNameL')) el('sbNameL').textContent = nameL
+    if (el('sbNameR')) el('sbNameR').textContent = nameR
   }
 
-  // Met à jour le chrono
   updateTimer(seconds) {
     const m = Math.floor(seconds / 60)
     const s = Math.floor(seconds % 60)
     const el = document.getElementById('sbTimer')
-    if (el) el.textContent = `${m}:${s.toString().padStart(2, '0')}`
-    // Rouge si < 30s
-    if (seconds < 30) el.style.color = '#ff3333'
-    else el.style.color = '#ffffff'
+    if (!el) return
+    el.textContent = `${m}:${s.toString().padStart(2, '0')}`
+    if (seconds < 30) {
+      el.style.color = '#ff3333'
+      el.style.textShadow = '0 0 10px #ff0000'
+    } else {
+      el.style.color = '#ffffff'
+      el.style.textShadow = ''
+    }
   }
 
-  // Met à jour la jauge de chakra
   updateChakra(chakra, max) {
     const ratio = chakra / max
     const fill = document.getElementById('chakraFill')
-    if (fill) {
-      const total = 157
-      fill.style.strokeDashoffset = total * (1 - ratio)
-    }
+    if (fill) fill.style.strokeDashoffset = String(157 * (1 - ratio))
     const label = document.getElementById('chakraLabel')
     if (label) label.textContent = Math.floor(chakra)
   }
 
-  // Met à jour les boutons jutsu
   updateJutsu(character, cooldowns, chakra) {
     character.jutsus.forEach((jutsu, i) => {
       const icon = document.getElementById(`jutsuIcon${i}`)
       const name = document.getElementById(`jutsuName${i}`)
       const cd = document.getElementById(`jutsuCd${i}`)
       const btn = this.jutsuButtons[i]
-
       if (icon) icon.textContent = this._jutsuIcon(jutsu.type)
       if (name) name.textContent = jutsu.name
       if (btn) {
@@ -165,30 +178,38 @@ export class HUD {
     })
   }
 
+  updateCombo(combo) {
+    const el = this.comboEl
+    if (!el) return
+    if (combo >= 2) {
+      el.textContent = `COMBO x${combo}`
+      el.style.opacity = '1'
+      el.style.transform = 'translateX(-50%) scale(1.15)'
+      setTimeout(() => {
+        if (el) el.style.transform = 'translateX(-50%) scale(1)'
+      }, 80)
+    } else {
+      el.style.opacity = '0'
+    }
+  }
+
   _jutsuIcon(type) {
     const icons = {
-      shot: '⚽',
-      pass: '➤',
-      boost: '▲',
-      tackle: '⚔',
-      dash: '⚡',
-      slowmo: '⌛',
-      zone: '◉',
-      heal: '✚',
-      copy: '✦',
+      shot: '⚽', pass: '➤', boost: '▲', tackle: '⚔',
+      dash: '⚡', slowmo: '⌛', zone: '◉', heal: '✚', copy: '✦',
     }
     return icons[type] || '?'
   }
 
-  // Affiche le but en grand
-  showGoal(scorerName) {
+  showGoal(scorerName, combo = 0) {
     const sub = document.getElementById('goalSub')
+    const gc = document.getElementById('goalCombo')
     if (sub) sub.textContent = scorerName
+    if (gc) gc.textContent = combo >= 5 ? `COMBO x${combo} !` : ''
     this.goalOverlay.classList.add('active')
-    setTimeout(() => this.goalOverlay.classList.remove('active'), 2500)
+    setTimeout(() => this.goalOverlay.classList.remove('active'), 2600)
   }
 
-  // Enregistre les boutons mobiles pour l'input
   registerMobileInput(input) {
     if (!input.isTouch) {
       this.mobileWrap.style.display = 'none'
@@ -204,9 +225,7 @@ export class HUD {
     buttons.forEach(({ id, action }) => {
       const el = document.getElementById(id)
       if (el) {
-        input.registerMobileButton(id, el, () => {
-          input.triggerAction(action)
-        })
+        input.registerMobileButton(id, el, () => input.triggerAction(action))
       }
     })
   }
