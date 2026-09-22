@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════
-// ÉCRANS — menus + progression locale + difficulté + achievements
+// ÉCRANS — menus + 2 joueurs + mute + achievements
 // ════════════════════════════════════════════════════════════
 import { CHARACTERS } from '../data/characters.js'
 import { Settings } from '../Settings.js'
@@ -23,22 +23,22 @@ export function createTitleScreen(onStart, onLeaderboard, onSettings, progress =
       <p class="title-sub">ULTIMATE CLASH</p>
       <p class="title-desc">Football Ninja Clash — Fan Game Non Commercial</p>
       ${p.gamesPlayed > 0 ? `<p style="opacity:0.75;font-size:13px;margin:8px 0">🏆 ${p.wins}V · Série ${p.winStreak} · Combo x${p.bestCombo} · 🎖️ ${unlockedCount}/8</p>` : ''}
-      <button class="btn-primary" id="btnStart">COMMENCER</button>
+      <button class="btn-primary" id="btnStart">VS IA</button>
+      <button class="btn-primary" id="btn2P" style="margin-top:10px;background:linear-gradient(135deg,#2b6fff,#00ffff)">2 JOUEURS</button>
       <div style="display:flex; gap:8px; justify-content:center; margin-top:10px; flex-wrap:wrap">
         <button class="btn-secondary" id="btnLeaderboard">CLASSEMENT</button>
         <button class="btn-secondary" id="btnSettings">OPTIONS</button>
       </div>
       <div class="title-controls">
-        <div class="ctrl-row"><span class="ctrl-key">ZQSD / WASD</span> Déplacer</div>
-        <div class="ctrl-row"><span class="ctrl-key">ESPACE</span> Tirer / Voler</div>
-        <div class="ctrl-row"><span class="ctrl-key">E</span> Dash</div>
-        <div class="ctrl-row"><span class="ctrl-key">1 / 2 / 3</span> Jutsu</div>
-        <div class="ctrl-row"><span class="ctrl-key">SHIFT</span> Sprint · <span class="ctrl-key">Échap</span> Pause</div>
+        <div class="ctrl-row"><span class="ctrl-key">P1 ZQSD</span> Déplacer · Espace tir · E dash · 1-3 jutsu</div>
+        <div class="ctrl-row"><span class="ctrl-key">P2 Flèches</span> Entrée tir · Shift dr. dash · 7-9 jutsu</div>
+        <div class="ctrl-row"><span class="ctrl-key">Échap / P</span> Pause</div>
       </div>
       <p class="title-disclaimer">Naruto © Kishimoto / Shueisha / Pierrot / Bandai Namco</p>
     </div>
   `
-  screen.querySelector('#btnStart').addEventListener('click', () => onStart())
+  screen.querySelector('#btnStart').addEventListener('click', () => onStart('vsAI'))
+  screen.querySelector('#btn2P').addEventListener('click', () => onStart('vsHuman'))
   screen.querySelector('#btnLeaderboard').addEventListener('click', () => onLeaderboard())
   const settingsBtn = screen.querySelector('#btnSettings')
   if (settingsBtn && typeof onSettings === 'function') settingsBtn.addEventListener('click', () => onSettings())
@@ -51,6 +51,7 @@ export function createSettingsScreen(onBack) {
   const curQuality = Settings.get('graphics.quality', 'high')
   const curShadows = Settings.get('graphics.shadows', true)
   const curVol = Settings.get('audio.volume', 0.4)
+  const curMuted = Settings.get('audio.muted', false)
   const curDiff = Progress.get().difficulty || 'normal'
   screen.innerHTML = `
     <div style="max-width:600px;text-align:left;padding:16px">
@@ -75,6 +76,9 @@ export function createSettingsScreen(onBack) {
         <label><input type="checkbox" id="optShadows" /> Activer les ombres</label>
       </div>
       <div style="margin:12px 0">
+        <label><input type="checkbox" id="optMute" /> Couper le son</label>
+      </div>
+      <div style="margin:12px 0">
         <label>Volume maître : </label>
         <input id="optVol" type="range" min="0" max="1" step="0.01" />
       </div>
@@ -88,9 +92,11 @@ export function createSettingsScreen(onBack) {
   const sel = screen.querySelector('#optQuality')
   const sh = screen.querySelector('#optShadows')
   const vol = screen.querySelector('#optVol')
+  const mute = screen.querySelector('#optMute')
   const diff = screen.querySelector('#optDiff')
   sel.value = curQuality
   sh.checked = !!curShadows
+  mute.checked = !!curMuted
   vol.value = String(curVol)
   diff.value = curDiff
 
@@ -98,10 +104,11 @@ export function createSettingsScreen(onBack) {
     Settings.set('graphics.quality', sel.value)
     Settings.set('graphics.shadows', !!sh.checked)
     Settings.set('audio.volume', Number(vol.value))
+    Settings.set('audio.muted', !!mute.checked)
     Progress.setDifficulty(diff.value)
-    onBack()
+    onBack({ muted: !!mute.checked })
   })
-  screen.querySelector('#optBack').addEventListener('click', () => onBack())
+  screen.querySelector('#optBack').addEventListener('click', () => onBack({}))
   screen.querySelector('#optRemap').addEventListener('click', async () => {
     const remapScreen = await import('./screens.js').then((m) =>
       m.createRemapScreen(() => {
@@ -122,7 +129,8 @@ export function createRemapScreen(onDone) {
   )
   screen.innerHTML = `
     <div style="max-width:600px;text-align:left;padding:16px">
-      <h2>Remapper les touches</h2>
+      <h2>Remapper les touches (Joueur 1)</h2>
+      <p style="opacity:0.7;font-size:13px;margin-bottom:12px">Joueur 2 : Flèches · Entrée · Shift droit · 7 / 8 / 9</p>
       <div id="remap-list"></div>
       <div style="margin-top:16px">
         <button class="btn-primary" id="remapSave">Enregistrer</button>
@@ -162,14 +170,15 @@ export function createRemapScreen(onDone) {
   return screen
 }
 
-export function createSelectScreen(onConfirm) {
+export function createSelectScreen(onConfirm, opts = {}) {
   const screen = document.createElement('div')
   screen.className = 'screen screen-select'
   let selectedIdx = 0
+  const header = opts.headerTitle || 'CHOISIS TON NINJA'
 
   screen.innerHTML = `
     <div class="select-header">
-      <h2>CHOISIS TON NINJA</h2>
+      <h2>${header}</h2>
     </div>
     <div class="select-grid" id="selectGrid"></div>
     <div class="select-detail" id="selectDetail"></div>
@@ -249,7 +258,18 @@ export function createSelectScreen(onConfirm) {
 export function createEndScreen(result, onRematch, onMenu, progress = null) {
   const screen = document.createElement('div')
   screen.className = 'screen screen-end'
-  const winnerText = result.winner === 'player' ? 'VICTOIRE !' : result.winner === 'ai' ? 'DÉFAITE...' : 'ÉGALITÉ'
+  const is2P = result.mode === 'vsHuman'
+  const winnerText = is2P
+    ? result.winner === 'player'
+      ? 'JOUEUR 1 GAGNE !'
+      : result.winner === 'ai'
+        ? 'JOUEUR 2 GAGNE !'
+        : 'ÉGALITÉ'
+    : result.winner === 'player'
+      ? 'VICTOIRE !'
+      : result.winner === 'ai'
+        ? 'DÉFAITE...'
+        : 'ÉGALITÉ'
   const winnerClass = result.winner === 'player' ? 'win' : result.winner === 'ai' ? 'lose' : 'draw'
   const pHex = '#' + result.playerChar.color.toString(16).padStart(6, '0')
   const aHex = '#' + result.aiChar.color.toString(16).padStart(6, '0')
@@ -280,10 +300,10 @@ export function createEndScreen(result, onRematch, onMenu, progress = null) {
         </div>
       </div>
       <div class="end-stats" style="margin:16px 0;font-size:14px;opacity:0.9;line-height:1.7">
-        <div>⚽ Buts : <strong>${st.playerGoals ?? result.scoreL}</strong></div>
+        <div>⚽ Buts P1 : <strong>${st.playerGoals ?? result.scoreL}</strong> · P2/IA : <strong>${st.aiGoals ?? result.scoreR}</strong></div>
         <div>⚔ Vols : <strong>${st.steals ?? 0}</strong> · ✦ Jutsu : <strong>${st.jutsusUsed ?? 0}</strong></div>
         <div>🔥 Combo max : <strong>x${st.maxCombo ?? 0}</strong></div>
-        <div style="margin-top:8px;opacity:0.75">Profil — ${p.wins}V / ${p.losses}D · Série ${p.winStreak} · Record x${p.bestCombo}</div>
+        ${!is2P ? `<div style="margin-top:8px;opacity:0.75">Profil — ${p.wins}V / ${p.losses}D · Série ${p.winStreak}</div>` : ''}
       </div>
       ${achHtml}
       <div class="end-buttons">
