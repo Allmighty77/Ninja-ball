@@ -1,40 +1,39 @@
 // ════════════════════════════════════════════════════════════
-// MOTEUR PHYSIQUE — Cannon-es
-// Gère le monde physique du ballon + collisions
+// MOTEUR PHYSIQUE — Cannon-es — timestep fixe (60 Hz)
+// Sensation stable type console / AAA
 // ════════════════════════════════════════════════════════════
 import * as CANNON from 'cannon-es'
+
+const FIXED_DT = 1 / 60
+const MAX_SUBSTEPS = 4
 
 export class Physics {
   constructor() {
     this.world = new CANNON.World({
-      gravity: new CANNON.Vec3(0, -30, 0),
+      gravity: new CANNON.Vec3(0, -28, 0),
     })
     this.world.broadphase = new CANNON.SAPBroadphase(this.world)
-    this.world.allowSleep = false
-    this.world.defaultContactMaterial.friction = 0.3
-    this.world.defaultContactMaterial.restitution = 0.6
+    this.world.allowSleep = true
+    this.world.defaultContactMaterial.friction = 0.28
+    this.world.defaultContactMaterial.restitution = 0.55
 
-    // Matériaux
     this.groundMat = new CANNON.Material('ground')
     this.ballMat = new CANNON.Material('ball')
     this.playerMat = new CANNON.Material('player')
 
-    // Contact ball-sol
     this.world.addContactMaterial(
       new CANNON.ContactMaterial(this.groundMat, this.ballMat, {
-        friction: 0.4,
-        restitution: 0.65,
+        friction: 0.35,
+        restitution: 0.62,
       }),
     )
-    // Contact ball-joueur
     this.world.addContactMaterial(
       new CANNON.ContactMaterial(this.playerMat, this.ballMat, {
-        friction: 0.1,
-        restitution: 0.8,
+        friction: 0.08,
+        restitution: 0.75,
       }),
     )
 
-    // Sol physique
     this.groundBody = new CANNON.Body({
       mass: 0,
       shape: new CANNON.Plane(),
@@ -43,11 +42,10 @@ export class Physics {
     this.groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2)
     this.world.addBody(this.groundBody)
 
-    // Murs invisibles (limites terrain) — créés plus tard par le stadium
     this.walls = []
+    this._accumulator = 0
   }
 
-  // Ajoute un mur de bord
   addWall(width, height, depth, x, y, z) {
     const body = new CANNON.Body({
       mass: 0,
@@ -60,22 +58,34 @@ export class Physics {
     return body
   }
 
-  // Crée le corps du ballon
   createBall(radius = 0.4) {
     const body = new CANNON.Body({
-      mass: 0.8,
+      mass: 0.75,
       shape: new CANNON.Sphere(radius),
       material: this.ballMat,
-      linearDamping: 0.15,
-      angularDamping: 0.15,
+      linearDamping: 0.12,
+      angularDamping: 0.18,
+      allowSleep: true,
+      sleepSpeedLimit: 0.15,
+      sleepTimeLimit: 0.4,
     })
     body.position.set(0, 2, 0)
     this.world.addBody(body)
     return body
   }
 
+  /**
+   * Step avec accumulateur (timestep fixe 60 Hz)
+   * Évite le jitter et les explosions de physique
+   */
   step(dt) {
-    this.world.step(Math.min(dt, 1 / 30))
+    this._accumulator += Math.min(dt, 0.05)
+    let steps = 0
+    while (this._accumulator >= FIXED_DT && steps < MAX_SUBSTEPS) {
+      this.world.step(FIXED_DT)
+      this._accumulator -= FIXED_DT
+      steps++
+    }
   }
 
   dispose() {
