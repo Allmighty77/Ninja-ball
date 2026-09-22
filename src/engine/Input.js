@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════
-// SYSTÈME D'ENTRÉES — Clavier + joystick mobile + gamepad
+// SYSTÈME D'ENTRÉES — P1 clavier/tactile + P2 flèches (2 joueurs)
 // ════════════════════════════════════════════════════════════
 
 import * as THREE from 'three'
@@ -13,28 +13,45 @@ const DEFAULT_MAPPING = {
   jutsu3: 'Digit3',
 }
 
+// P2 fixe (évite conflits avec P1)
+const P2_MAP = {
+  up: 'ArrowUp',
+  down: 'ArrowDown',
+  left: 'ArrowLeft',
+  right: 'ArrowRight',
+  shoot: 'Enter',
+  dash: 'ShiftRight',
+  jutsu1: 'Digit7',
+  jutsu2: 'Digit8',
+  jutsu3: 'Digit9',
+}
+
 export class Input {
   constructor() {
     this.keys = {}
     this.move = new THREE.Vector2(0, 0)
+    this.move2 = new THREE.Vector2(0, 0)
     this.sprint = false
+    this.sprint2 = false
     this.actions = { shoot: false, dash: false, jutsu: [false, false, false] }
+    this.actions2 = { shoot: false, dash: false, jutsu: [false, false, false] }
     this._pressed = new Set()
+    this.twoPlayer = false
 
     this.joy = { active: false, cx: 0, cy: 0, dx: 0, dy: 0, id: null }
     this.mobileButtons = {}
 
-    // Remap : Settings OU localStorage (écran remap)
     this.mapping = { ...DEFAULT_MAPPING, ...this._loadMapping() }
 
     this._onKeyDown = (e) => {
       const code = e.code
       this.keys[code] = true
       const mappedCodes = Object.values(this.mapping)
-      if (mappedCodes.includes(code) || this._isMoveKey(code)) {
+      const p2Codes = Object.values(P2_MAP)
+      if (mappedCodes.includes(code) || p2Codes.includes(code) || this._isMoveKey(code)) {
         e.preventDefault()
       }
-      if (mappedCodes.includes(code)) {
+      if (mappedCodes.includes(code) || p2Codes.includes(code)) {
         this._pressed.add(code)
       }
     }
@@ -55,6 +72,10 @@ export class Input {
 
     this._isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0
     if (this._isTouch) this._setupTouch()
+  }
+
+  setTwoPlayer(enabled) {
+    this.twoPlayer = !!enabled
   }
 
   _loadMapping() {
@@ -146,14 +167,23 @@ export class Input {
   }
 
   update() {
+    // ── Joueur 1 ──
     let mx = 0
     let my = 0
-    if (this.keys['KeyW'] || this.keys['KeyZ'] || this.keys['ArrowUp']) my -= 1
-    if (this.keys['KeyS'] || this.keys['ArrowDown']) my += 1
-    if (this.keys['KeyA'] || this.keys['KeyQ'] || this.keys['ArrowLeft']) mx -= 1
-    if (this.keys['KeyD'] || this.keys['ArrowRight']) mx += 1
+    if (this.keys['KeyW'] || this.keys['KeyZ']) my -= 1
+    if (this.keys['KeyS']) my += 1
+    if (this.keys['KeyA'] || this.keys['KeyQ']) mx -= 1
+    if (this.keys['KeyD']) mx += 1
 
-    this.sprint = !!(this.keys['ShiftLeft'] || this.keys['ShiftRight'])
+    // Flèches = P1 seulement si PAS en 2 joueurs
+    if (!this.twoPlayer) {
+      if (this.keys['ArrowUp']) my -= 1
+      if (this.keys['ArrowDown']) my += 1
+      if (this.keys['ArrowLeft']) mx -= 1
+      if (this.keys['ArrowRight']) mx += 1
+    }
+
+    this.sprint = !!this.keys['ShiftLeft']
 
     if (this.joy.active) {
       mx = this.joy.dx / 80
@@ -167,14 +197,40 @@ export class Input {
     }
     this.move.set(mx, my)
 
-    // Utilise les clés d'action du mapping (remap fonctionnel)
-    this.actions.shoot = this._consume('shoot')
-    this.actions.dash = this._consume('dash')
-    this.actions.jutsu[0] = this._consume('jutsu1')
-    this.actions.jutsu[1] = this._consume('jutsu2')
-    this.actions.jutsu[2] = this._consume('jutsu3')
+    this.actions.shoot = this._consume(this.mapping.shoot)
+    this.actions.dash = this._consume(this.mapping.dash)
+    this.actions.jutsu[0] = this._consume(this.mapping.jutsu1)
+    this.actions.jutsu[1] = this._consume(this.mapping.jutsu2)
+    this.actions.jutsu[2] = this._consume(this.mapping.jutsu3)
 
-    if (this._gamepadIndex !== null) {
+    // ── Joueur 2 ──
+    if (this.twoPlayer) {
+      let mx2 = 0
+      let my2 = 0
+      if (this.keys[P2_MAP.up]) my2 -= 1
+      if (this.keys[P2_MAP.down]) my2 += 1
+      if (this.keys[P2_MAP.left]) mx2 -= 1
+      if (this.keys[P2_MAP.right]) mx2 += 1
+      const len2 = Math.hypot(mx2, my2)
+      if (len2 > 1) {
+        mx2 /= len2
+        my2 /= len2
+      }
+      this.move2.set(mx2, my2)
+      this.sprint2 = !!this.keys[P2_MAP.dash] // maintenu = sprint approximatif
+      this.actions2.shoot = this._consume(P2_MAP.shoot)
+      this.actions2.dash = this._consume(P2_MAP.dash)
+      this.actions2.jutsu[0] = this._consume(P2_MAP.jutsu1)
+      this.actions2.jutsu[1] = this._consume(P2_MAP.jutsu2)
+      this.actions2.jutsu[2] = this._consume(P2_MAP.jutsu3)
+    } else {
+      this.move2.set(0, 0)
+      this.actions2.shoot = false
+      this.actions2.dash = false
+      this.actions2.jutsu = [false, false, false]
+    }
+
+    if (this._gamepadIndex !== null && !this.twoPlayer) {
       const gp = navigator.getGamepads()[this._gamepadIndex]
       if (gp) {
         const gmx = gp.axes[0] || 0
@@ -193,8 +249,7 @@ export class Input {
     }
   }
 
-  _consume(actionName) {
-    const code = this.mapping[actionName] || DEFAULT_MAPPING[actionName]
+  _consume(code) {
     if (code && this._pressed.has(code)) {
       this._pressed.delete(code)
       return true
