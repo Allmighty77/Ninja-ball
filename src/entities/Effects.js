@@ -1,7 +1,8 @@
 // ════════════════════════════════════════════════════════════
-// EFFETS — Particules, auras, zones — optimisé perf (peu de GC)
+// EFFETS — Particules scalées par preset qualité
 // ════════════════════════════════════════════════════════════
 import * as THREE from 'three'
+import { scaleParticleCount } from '../engine/GraphicsQuality.js'
 
 export class Effects {
   constructor(renderer) {
@@ -9,19 +10,18 @@ export class Effects {
     this.particles = []
     this.auras = []
     this.zones = []
-    // Réutiliser des vecteurs pour éviter new dans les loops
     this._tmp = new THREE.Vector3()
   }
 
   spawnImpact(pos, color = 0xff6b1a) {
-    this._spawnPoints(pos, color, 16, 0.55, 0.28, 4, 6)
+    this._spawnPoints(pos, color, scaleParticleCount(16), 0.55, 0.28, 4, 6)
   }
 
   spawnBurst(pos, color, count = 28) {
     this._spawnPoints(
       { x: pos.x, y: (pos.y || 0) + 0.4, z: pos.z },
       color,
-      count,
+      scaleParticleCount(count),
       0.9,
       0.38,
       6,
@@ -67,8 +67,7 @@ export class Effects {
   }
 
   spawnDashTrail(pos, color, dir) {
-    // Moins de meshes, plus léger
-    const count = 6
+    const count = scaleParticleCount(6)
     for (let i = 0; i < count; i++) {
       const geo = new THREE.SphereGeometry(0.22 - i * 0.025, 6, 5)
       const mat = new THREE.MeshBasicMaterial({
@@ -136,7 +135,6 @@ export class Effects {
   }
 
   update(dt) {
-    // Particules
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i]
       p.life -= dt
@@ -166,7 +164,6 @@ export class Effects {
       }
     }
 
-    // Auras
     for (let i = this.auras.length - 1; i >= 0; i--) {
       const a = this.auras[i]
       a.life -= dt
@@ -187,7 +184,6 @@ export class Effects {
       a.mesh.material.opacity = (a.life / a.maxLife) * 0.28
     }
 
-    // Zones
     for (let i = this.zones.length - 1; i >= 0; i--) {
       const z = this.zones[i]
       z.life -= dt
