@@ -1,13 +1,15 @@
 // ════════════════════════════════════════════════════════════
-// ÉCRANS — menus + progression locale + difficulté
+// ÉCRANS — menus + progression locale + difficulté + achievements
 // ════════════════════════════════════════════════════════════
 import { CHARACTERS } from '../data/characters.js'
 import { Settings } from '../Settings.js'
 import { Progress } from '../data/Progress.js'
+import { Achievements } from '../data/Achievements.js'
 import { getCharacterStats, getRecentMatches } from '../data/db.js'
 
 export function createTitleScreen(onStart, onLeaderboard, onSettings, progress = null) {
   const p = progress || Progress.get()
+  const unlockedCount = Achievements.list().filter((a) => a.unlocked).length
   const screen = document.createElement('div')
   screen.className = 'screen screen-title'
   screen.innerHTML = `
@@ -20,7 +22,7 @@ export function createTitleScreen(onStart, onLeaderboard, onSettings, progress =
       </h1>
       <p class="title-sub">ULTIMATE CLASH</p>
       <p class="title-desc">Football Ninja Clash — Fan Game Non Commercial</p>
-      ${p.gamesPlayed > 0 ? `<p style="opacity:0.75;font-size:13px;margin:8px 0">🏆 ${p.wins}V · Série ${p.winStreak} · Record combo x${p.bestCombo}</p>` : ''}
+      ${p.gamesPlayed > 0 ? `<p style="opacity:0.75;font-size:13px;margin:8px 0">🏆 ${p.wins}V · Série ${p.winStreak} · Combo x${p.bestCombo} · 🎖️ ${unlockedCount}/8</p>` : ''}
       <button class="btn-primary" id="btnStart">COMMENCER</button>
       <div style="display:flex; gap:8px; justify-content:center; margin-top:10px; flex-wrap:wrap">
         <button class="btn-secondary" id="btnLeaderboard">CLASSEMENT</button>
@@ -253,6 +255,15 @@ export function createEndScreen(result, onRematch, onMenu, progress = null) {
   const aHex = '#' + result.aiChar.color.toString(16).padStart(6, '0')
   const st = result.stats || {}
   const p = progress || Progress.get()
+  const unlocked = result.unlockedAchievements || []
+
+  const achHtml =
+    unlocked.length > 0
+      ? `<div style="margin:12px 0;padding:10px;border:1px solid #ff6b1a55;border-radius:10px;background:rgba(255,107,26,0.08)">
+        <div style="color:#ffaa3a;font-weight:700;margin-bottom:6px">🎖️ Nouveau !</div>
+        ${unlocked.map((a) => `<div style="font-size:13px"><strong>${a.name}</strong> — ${a.desc}</div>`).join('')}
+      </div>`
+      : ''
 
   screen.innerHTML = `
     <div class="end-content">
@@ -274,6 +285,7 @@ export function createEndScreen(result, onRematch, onMenu, progress = null) {
         <div>🔥 Combo max : <strong>x${st.maxCombo ?? 0}</strong></div>
         <div style="margin-top:8px;opacity:0.75">Profil — ${p.wins}V / ${p.losses}D · Série ${p.winStreak} · Record x${p.bestCombo}</div>
       </div>
+      ${achHtml}
       <div class="end-buttons">
         <button class="btn-primary" id="btnRematch">REJOUER</button>
         <button class="btn-secondary" id="btnMenu">MENU</button>
@@ -289,11 +301,23 @@ export function createLeaderboardScreen(onBack) {
   const screen = document.createElement('div')
   screen.className = 'screen screen-leaderboard'
   const local = Progress.get()
+  const achs = Achievements.list()
+  const unlockedCount = achs.filter((a) => a.unlocked).length
+
   screen.innerHTML = `
     <div class="leaderboard-content">
       <h2>CLASSEMENT</h2>
-      <div style="margin-bottom:16px;opacity:0.85;font-size:14px">
+      <div style="margin-bottom:12px;opacity:0.85;font-size:14px">
         Stats locales : ${local.wins}V · ${local.losses}D · ${local.draws}N · Série ${local.winStreak}
+      </div>
+      <div style="margin-bottom:16px;text-align:left;max-width:420px;margin-left:auto;margin-right:auto;font-size:13px">
+        <div style="color:#ffaa3a;font-weight:700;margin-bottom:6px">Achievements ${unlockedCount}/${achs.length}</div>
+        ${achs
+          .map(
+            (a) =>
+              `<div style="opacity:${a.unlocked ? 1 : 0.4};margin:3px 0">${a.unlocked ? '✅' : '⬜'} <strong>${a.name}</strong> — ${a.desc}</div>`,
+          )
+          .join('')}
       </div>
       <div class="leaderboard-loading" id="lbLoading">Chargement online...</div>
       <div class="leaderboard-stats" id="lbStats"></div>
