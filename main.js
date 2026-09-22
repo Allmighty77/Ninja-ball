@@ -16,6 +16,7 @@ import { DevOverlay } from './src/dev/DevOverlay.js'
 import { Match } from './src/systems/Match.js'
 import { CHARACTERS } from './src/data/characters.js'
 import { Progress } from './src/data/Progress.js'
+import { Achievements } from './src/data/Achievements.js'
 
 const audio = new AudioEngine()
 
@@ -106,8 +107,10 @@ function startMatch(playerChar, aiChar) {
 
   currentMatch = new Match(playerChar, aiChar, audio, { difficulty, showTutorial })
   currentMatch.onEnd = (result) => {
-    Progress.recordMatch(result)
+    const progress = Progress.recordMatch(result)
     if (showTutorial) Progress.markTutorialDone()
+    const unlocked = Achievements.evaluate(progress, result.stats || {})
+    result.unlockedAchievements = unlocked
     currentMatch.dispose()
     currentMatch = null
     showEnd(result)
@@ -118,6 +121,9 @@ function startMatch(playerChar, aiChar) {
 function showEnd(result) {
   state = 'end'
   const progress = Progress.get()
+  if (result.unlockedAchievements?.length) {
+    audio.play('goal')
+  }
   const screen = createEndScreen(
     result,
     () => {
@@ -145,7 +151,6 @@ function showLeaderboard() {
 }
 
 DevOverlay.install()
-// Ne pas précharger des .glb absents (ralentit le démarrage)
 Loader.preload({ assets: [], sounds: [] })
   .then(() => {
     Settings.applyToAudio(audio)
