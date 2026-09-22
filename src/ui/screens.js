@@ -1,12 +1,10 @@
 // ════════════════════════════════════════════════════════════
-// ÉCRANS — Gestion des menus (Titre, Sélection, Fin)
-// Éléments DOM HTML/CSS par-dessus le canvas Three.js
+// ÉCRANS — Menus polishes + fin de match avec stats addictives
 // ════════════════════════════════════════════════════════════
 import { CHARACTERS, getCharacterById } from '../data/characters.js'
 import { Settings } from '../Settings.js'
 import { getCharacterStats, getRecentMatches } from '../data/db.js'
 
-// Écran de titre
 export function createTitleScreen(onStart, onLeaderboard, onSettings) {
   const screen = document.createElement('div')
   screen.className = 'screen screen-title'
@@ -27,7 +25,7 @@ export function createTitleScreen(onStart, onLeaderboard, onSettings) {
       </div>
       <div class="title-controls">
         <div class="ctrl-row"><span class="ctrl-key">ZQSD / WASD</span> Déplacer</div>
-        <div class="ctrl-row"><span class="ctrl-key">ESPACE</span> Tirer / Passer</div>
+        <div class="ctrl-row"><span class="ctrl-key">ESPACE</span> Tirer / Voler</div>
         <div class="ctrl-row"><span class="ctrl-key">E</span> Dash</div>
         <div class="ctrl-row"><span class="ctrl-key">1 / 2 / 3</span> Jutsu</div>
         <div class="ctrl-row"><span class="ctrl-key">SHIFT</span> Sprint</div>
@@ -42,7 +40,6 @@ export function createTitleScreen(onStart, onLeaderboard, onSettings) {
   return screen
 }
 
-// Écran de paramètres simples (qualité, son)
 export function createSettingsScreen(onBack) {
   const screen = document.createElement('div')
   screen.className = 'screen screen-select'
@@ -89,11 +86,9 @@ export function createSettingsScreen(onBack) {
   })
   screen.querySelector('#optBack').addEventListener('click', () => onBack())
   screen.querySelector('#optRemap').addEventListener('click', async () => {
-    const remapScreen = await import('./screens.js').then(m => m.createRemapScreen((saved) => {
-      // after remap, return to settings screen (replace back)
+    const remapScreen = await import('./screens.js').then(m => m.createRemapScreen(() => {
       if (remapScreen.parentElement) remapScreen.parentElement.replaceChild(screen, remapScreen)
     }))
-    // replace current screen with remap
     if (screen.parentElement) screen.parentElement.replaceChild(remapScreen, screen)
   })
   return screen
@@ -142,7 +137,6 @@ export function createRemapScreen(onDone) {
   return screen
 }
 
-// Écran de sélection de personnage
 export function createSelectScreen(onConfirm) {
   const screen = document.createElement('div')
   screen.className = 'screen screen-select'
@@ -218,17 +212,11 @@ export function createSelectScreen(onConfirm) {
   renderCards()
   renderDetail()
 
-  screen.querySelector('#btnConfirm').addEventListener('click', () => {
-    onConfirm(CHARACTERS[selectedIdx])
-  })
-  screen.querySelector('#btnBack').addEventListener('click', () => {
-    onConfirm(null) // null = retour
-  })
-
+  screen.querySelector('#btnConfirm').addEventListener('click', () => onConfirm(CHARACTERS[selectedIdx]))
+  screen.querySelector('#btnBack').addEventListener('click', () => onConfirm(null))
   return screen
 }
 
-// Écran de fin de match
 export function createEndScreen(result, onRematch, onMenu) {
   const screen = document.createElement('div')
   screen.className = 'screen screen-end'
@@ -236,6 +224,7 @@ export function createEndScreen(result, onRematch, onMenu) {
   const winnerClass = result.winner === 'player' ? 'win' : result.winner === 'ai' ? 'lose' : 'draw'
   const pHex = '#' + result.playerChar.color.toString(16).padStart(6, '0')
   const aHex = '#' + result.aiChar.color.toString(16).padStart(6, '0')
+  const st = result.stats || {}
 
   screen.innerHTML = `
     <div class="end-content">
@@ -251,6 +240,12 @@ export function createEndScreen(result, onRematch, onMenu) {
           <div class="end-name" style="color:${aHex}">${result.aiChar.name}</div>
         </div>
       </div>
+      <div class="end-stats" style="margin:16px 0;font-size:14px;opacity:0.9;line-height:1.7">
+        <div>⚽ Buts : <strong>${st.playerGoals ?? result.scoreL}</strong></div>
+        <div>⚔ Vols de balle : <strong>${st.steals ?? 0}</strong></div>
+        <div>✦ Jutsu utilisés : <strong>${st.jutsusUsed ?? 0}</strong></div>
+        <div>🔥 Meilleur combo : <strong>x${st.maxCombo ?? 0}</strong></div>
+      </div>
       <div class="end-buttons">
         <button class="btn-primary" id="btnRematch">REJOUER</button>
         <button class="btn-secondary" id="btnMenu">MENU</button>
@@ -262,7 +257,6 @@ export function createEndScreen(result, onRematch, onMenu) {
   return screen
 }
 
-// Écran classement — statistiques des personnages + historique récent
 export function createLeaderboardScreen(onBack) {
   const screen = document.createElement('div')
   screen.className = 'screen screen-leaderboard'
@@ -279,7 +273,6 @@ export function createLeaderboardScreen(onBack) {
     </div>
   `
 
-  // Chargement asynchrone des données
   const statsEl = screen.querySelector('#lbStats')
   const recentEl = screen.querySelector('#lbRecent')
   const loadingEl = screen.querySelector('#lbLoading')
@@ -287,17 +280,13 @@ export function createLeaderboardScreen(onBack) {
   Promise.all([getCharacterStats(), getRecentMatches(8)])
     .then(([stats, recent]) => {
       loadingEl.style.display = 'none'
-
-      // Tableau des stats par perso
       if (stats.length === 0) {
         statsEl.innerHTML = '<p class="lb-empty">Aucun match joué pour le moment.</p>'
       } else {
         statsEl.innerHTML = `
           <table class="lb-table">
             <thead>
-              <tr>
-                <th>Ninja</th><th>V</th><th>D</th><th>N</th><th>BM</th><th>BE</th><th>MJ</th>
-              </tr>
+              <tr><th>Ninja</th><th>V</th><th>D</th><th>N</th><th>BM</th><th>BE</th><th>MJ</th></tr>
             </thead>
             <tbody>
               ${stats.map((s) => {
@@ -305,20 +294,14 @@ export function createLeaderboardScreen(onBack) {
                 const hex = char ? '#' + char.color.toString(16).padStart(6, '0') : '#ff6b1a'
                 return `<tr>
                   <td class="lb-name" style="color:${hex}">${s.character_name}</td>
-                  <td>${s.wins}</td>
-                  <td>${s.losses}</td>
-                  <td>${s.draws}</td>
-                  <td>${s.goals_scored}</td>
-                  <td>${s.goals_conceded}</td>
-                  <td>${s.matches_played}</td>
+                  <td>${s.wins}</td><td>${s.losses}</td><td>${s.draws}</td>
+                  <td>${s.goals_scored}</td><td>${s.goals_conceded}</td><td>${s.matches_played}</td>
                 </tr>`
               }).join('')}
             </tbody>
           </table>
         `
       }
-
-      // Historique récent
       if (recent.length === 0) {
         recentEl.innerHTML = '<p class="lb-empty">Aucun match récent.</p>'
       } else {
