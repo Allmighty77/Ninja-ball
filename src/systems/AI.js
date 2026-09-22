@@ -26,7 +26,8 @@ export class AI {
 
     const ballPos = new THREE.Vector3(this.ball.position.x, 0, this.ball.position.z)
     const distToBall = this.player.position.distanceTo(ballPos)
-    const goalZ = this.player.side === 0 ? -35 : 35
+    // IA (side 1) score en -Z, joueur (side 0) score en +Z
+    const goalZ = this.player.side === 0 ? 35 : -35
     const distToGoal = Math.abs(this.player.position.z - goalZ)
 
     let dir = { x: 0, y: 0 }
@@ -39,21 +40,23 @@ export class AI {
         sprint = distToBall > 10
         break
       case 'dribble':
-        // Avance vers le but avec le ballon
+        // Avance vers le but adverse avec le ballon
         const goalDir = this._dirTo(new THREE.Vector3(0, 0, goalZ))
         dir = goalDir
         sprint = distToGoal > 20
         break
       case 'shoot':
         // Tire vers le but
-        if (this.player.hasBall && distToGoal < 20) {
-          this.player.shoot(this.ball, 1.2, true)
+        if (this.player.hasBall && distToGoal < 22) {
+          this.player.shoot(this.ball, 1.25, true)
           this.decision = 'chase'
         }
         break
       case 'defend':
-        // Retourne vers son but
-        const ownGoal = new THREE.Vector3(0, 0, this.player.side === 0 ? 35 : -35)
+        // Retourne vers son propre but
+        // ownGoal : côté opposé à goalZ
+        const ownGoalZ = this.player.side === 0 ? -35 : 35
+        const ownGoal = new THREE.Vector3(0, 0, ownGoalZ)
         dir = this._dirTo(ownGoal)
         break
       case 'steal':
@@ -62,7 +65,7 @@ export class AI {
           dir = this._dirTo(this.opponent.position)
           sprint = true
           // Si proche, utilise un jutsu de tackle
-          if (this.player.position.distanceTo(this.opponent.position) < 4) {
+          if (this.player.position.distanceTo(this.opponent.position) < 4.5) {
             const tackleIdx = this.player.character.jutsus.findIndex((j) => j.type === 'tackle')
             if (tackleIdx >= 0 && this.player.cooldowns[tackleIdx] <= 0 && this.player.chakra >= 30) {
               this.player.useJutsu(tackleIdx, this.ball, this.opponent)
@@ -92,18 +95,18 @@ export class AI {
   _think() {
     const ballPos = new THREE.Vector3(this.ball.position.x, 0, this.ball.position.z)
     const distToBall = this.player.position.distanceTo(ballPos)
-    const goalZ = this.player.side === 0 ? -35 : 35
+    const goalZ = this.player.side === 0 ? 35 : -35
     const distToGoal = Math.abs(this.player.position.z - goalZ)
 
     if (this.player.hasBall) {
-      if (distToGoal < 18) {
+      if (distToGoal < 20) {
         this.decision = 'shoot'
       } else {
         this.decision = 'dribble'
       }
     } else if (this.opponent.hasBall) {
       this.decision = 'steal'
-    } else if (distToBall < 15) {
+    } else if (distToBall < 16) {
       this.decision = 'chase'
     } else {
       // Retourne en défense si le ballon est loin
