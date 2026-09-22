@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════
-// HUD — FIFA + Naruto Storm + Combo addictif
+// HUD — score, chakra, jutsu, combo, pause, tutoriel
 // ════════════════════════════════════════════════════════════
 
 export class HUD {
@@ -12,6 +12,8 @@ export class HUD {
     this._buildCombo()
     this._buildMobileControls()
     this._buildGoalOverlay()
+    this._buildPauseOverlay()
+    this._buildTutorial()
   }
 
   _buildScoreboard() {
@@ -87,7 +89,6 @@ export class HUD {
       opacity:0; transition:opacity 0.15s, transform 0.15s;
       pointer-events:none; letter-spacing:2px; z-index:20;
     `
-    this.comboEl.textContent = ''
     this.root.appendChild(this.comboEl)
   }
 
@@ -119,6 +120,51 @@ export class HUD {
       <div class="goal-combo" id="goalCombo" style="font-size:18px;margin-top:8px;opacity:0.9"></div>
     `
     this.root.appendChild(this.goalOverlay)
+  }
+
+  _buildPauseOverlay() {
+    this.pauseOverlay = document.createElement('div')
+    this.pauseOverlay.id = 'pauseOverlay'
+    this.pauseOverlay.style.cssText = `
+      display:none; position:absolute; inset:0; z-index:50;
+      background:rgba(0,0,0,0.72); align-items:center; justify-content:center;
+      flex-direction:column; color:#fff; font-family:system-ui,sans-serif;
+    `
+    this.pauseOverlay.innerHTML = `
+      <div style="font-size:42px;font-weight:900;letter-spacing:4px;margin-bottom:12px">PAUSE</div>
+      <div style="opacity:0.8;margin-bottom:24px">Échap ou P pour reprendre</div>
+      <div style="font-size:13px;opacity:0.55">ZQSD · Espace tir · E dash · 1/2/3 jutsu · Shift sprint</div>
+    `
+    this.root.appendChild(this.pauseOverlay)
+  }
+
+  _buildTutorial() {
+    this.tutorialEl = document.createElement('div')
+    this.tutorialEl.id = 'tutorialOverlay'
+    this.tutorialEl.style.cssText = `
+      display:none; position:absolute; bottom:18%; left:50%; transform:translateX(-50%);
+      z-index:40; max-width:min(420px,92vw); padding:14px 18px;
+      background:rgba(10,10,24,0.92); border:1px solid #ff6b1a88; border-radius:12px;
+      color:#fff; font-size:14px; line-height:1.5; text-align:center;
+      pointer-events:none;
+    `
+    this.tutorialEl.innerHTML = `
+      <strong style="color:#ff6b1a">Objectif</strong> : marque plus de buts que l'adversaire en 2 min.<br/>
+      <strong>Espace</strong> = tirer / voler · <strong>E</strong> = dash · <strong>1 2 3</strong> = jutsu<br/>
+      <span style="opacity:0.7">Gère ton chakra. Enchaîne des combos pour plus de puissance.</span>
+    `
+    this.root.appendChild(this.tutorialEl)
+  }
+
+  showTutorial() {
+    this.tutorialEl.style.display = 'block'
+    setTimeout(() => {
+      if (this.tutorialEl) this.tutorialEl.style.display = 'none'
+    }, 9000)
+  }
+
+  setPaused(paused) {
+    this.pauseOverlay.style.display = paused ? 'flex' : 'none'
   }
 
   mount(parent) {
