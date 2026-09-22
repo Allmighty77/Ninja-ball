@@ -58,9 +58,6 @@ export class Match {
     this.hud.updateScore(0, 0, playerChar.name, aiChar.name)
     this.hud.registerMobileInput(this.input)
     if (this.showTutorial) this.hud.showTutorial()
-    if (this.mode === 'vsHuman') {
-      this.hud.showTutorial?.() // message générique ok
-    }
 
     this.timeLeft = 120
     this.scoreL = 0
@@ -79,6 +76,9 @@ export class Match {
     this.jutsusUsed = 0
     this.maxCombo = 0
 
+    this._timers = []
+    this._ballFlat = new THREE.Vector3()
+
     this.audio.play('whistle')
     try {
       this.audio.startMusic()
@@ -96,6 +96,18 @@ export class Match {
       }
     }
     window.addEventListener('keydown', this._onKeyPause)
+  }
+
+  _later(fn, ms) {
+    const id = setTimeout(() => {
+      this._timers = this._timers.filter((t) => t !== id)
+      if (!this._running && this.gameOver === false) return
+      try {
+        fn()
+      } catch {}
+    }, ms)
+    this._timers.push(id)
+    return id
   }
 
   togglePause() {
@@ -156,8 +168,8 @@ export class Match {
         x: move.x || pl.facing.x,
         y: move.y || pl.facing.z,
       })
-      if (ok && isP1) {
-        this._addCombo(1)
+      if (ok) {
+        if (isP1) this._addCombo(1)
         this.renderer.punchFOV(4)
         this.renderer.addShake(0.25)
       }
@@ -272,9 +284,9 @@ export class Match {
   }
 
   _checkBallPossession() {
-    const ballPos = new THREE.Vector3(this.ball.position.x, 0, this.ball.position.z)
-    const distP = this.player.position.distanceTo(ballPos)
-    const distA = this.aiPlayer.position.distanceTo(ballPos)
+    this._ballFlat.set(this.ball.position.x, 0, this.ball.position.z)
+    const distP = this.player.position.distanceTo(this._ballFlat)
+    const distA = this.aiPlayer.position.distanceTo(this._ballFlat)
 
     if (!this.player.hasBall && !this.aiPlayer.hasBall) {
       if (this.ball.speed < 4.0) {
@@ -343,8 +355,8 @@ export class Match {
     this.player.velocity.set(0, 0, 0)
     this.aiPlayer.velocity.set(0, 0, 0)
 
-    setTimeout(() => {
-      this.ball.reset(0)
+    this._later(() => {
+      if (this.ball) this.ball.reset(0)
     }, 1300)
   }
 
@@ -372,13 +384,15 @@ export class Match {
     if (this.mode === 'vsAI') {
       saveMatchResult(result, this.playerChar, this.aiChar)
     }
-    setTimeout(() => {
+    this._later(() => {
       if (this.onEnd) this.onEnd(result)
     }, 1400)
   }
 
   dispose() {
     this.stop()
+    for (const id of this._timers) clearTimeout(id)
+    this._timers = []
     try {
       this.audio.stopMusic()
     } catch {}
@@ -388,6 +402,7 @@ export class Match {
     this.player.dispose()
     this.aiPlayer.dispose()
     this.ball.dispose()
+    this.physics.dispose()
     this.renderer.dispose()
     if (this.canvas.parentElement) this.canvas.parentElement.removeChild(this.canvas)
   }
