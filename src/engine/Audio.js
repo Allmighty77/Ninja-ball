@@ -1,19 +1,22 @@
 // ════════════════════════════════════════════════════════════
 // AUDIO — Web Audio API
-// SFX synthétisés (tir, jutsu, but, sifflet) + structure pour mp3
+// SFX synthétisés + musique d'ambiance loop + mute
 // ════════════════════════════════════════════════════════════
 
 export class AudioEngine {
   constructor() {
     this.ctx = null
     this.enabled = false
+    this.muted = false
     this.masterGain = null
-    // Structure pour futurs fichiers mp3
+    this.sfxGain = null
+    this.musicGain = null
     this.sounds = {}
     this.unlocked = false
+    this._musicNodes = []
+    this._musicPlaying = false
   }
 
-  // Initialise le contexte audio (nécessite interaction utilisateur)
   init() {
     if (this.ctx) return
     try {
@@ -21,20 +24,40 @@ export class AudioEngine {
       this.masterGain = this.ctx.createGain()
       this.masterGain.gain.value = 0.4
       this.masterGain.connect(this.ctx.destination)
+
+      this.sfxGain = this.ctx.createGain()
+      this.sfxGain.gain.value = 1
+      this.sfxGain.connect(this.masterGain)
+
+      this.musicGain = this.ctx.createGain()
+      this.musicGain.gain.value = 0.12
+      this.musicGain.connect(this.masterGain)
+
       this.enabled = true
     } catch (e) {
       console.warn('Audio non disponible', e)
     }
   }
 
-  // Déverrouille l'audio sur interaction
   unlock() {
     if (!this.ctx) this.init()
     if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume()
     this.unlocked = true
   }
 
-  // Charge un fichier son (pour ajout mp3 futurs)
+  setMuted(muted) {
+    this.muted = !!muted
+    if (this.masterGain) {
+      this.masterGain.gain.value = this.muted ? 0 : 0.4
+    }
+  }
+
+  setVolume(vol) {
+    if (this.masterGain && !this.muted) {
+      this.masterGain.gain.value = Math.max(0, Math.min(1, vol))
+    }
+  }
+
   async loadSound(name, url) {
     if (!this.ctx) this.init()
     try {
@@ -47,14 +70,63 @@ export class AudioEngine {
     }
   }
 
-  // Joue un son chargé (mp3) ou fallback synthétisé
   play(name, opts = {}) {
-    if (!this.enabled || !this.ctx) return
+    if (!this.enabled || !this.ctx || this.muted) return
     if (this.sounds[name]) {
       this._playBuffer(name, opts)
     } else {
       this._playSynth(name, opts)
     }
+  }
+
+  /** Musique d'ambiance minimaliste (pad + pulse) — démarre une seule fois */
+  startMusic() {
+    if (!this.enabled || !this.ctx || this._musicPlaying) return
+    this._musicPlaying = true
+    const ctx = this.ctx
+    const now = ctx.currentTime
+
+    // Pad grave
+    const osc1 = ctx.createOscillator()
+    const g1 = ctx.createGain()
+    osc1.type = 'sine'
+    osc1.frequency.value = 110
+    g1.gain.value = 0.08
+    osc1.connect(g1)
+    g1.connect(this.musicGain)
+    osc1.start(now)
+
+    // Pad aigu léger
+    const osc2 = ctx.createOscillator()
+    const g2 = ctx.createGain()
+    osc2.type = 'triangle'
+    osc2.frequency.value = 220
+    g2.gain.value = 0.04
+    osc2.connect(g2)
+    g2.connect(this.musicGain)
+    osc2.start(now)
+
+    // LFO volume pour respiration
+    const lfo = ctx.createOscillator()
+    const lfoGain = ctx.createGain()
+    lfo.frequency.value = 0.08
+    lfoGain.gain.value = 0.03
+    lfo.connect(lfoGain)
+    lfoGain.connect(g1.gain)
+    lfo.start(now)
+
+    this._musicNodes = [osc1, osc2, lfo, g1, g2]
+  }
+
+  stopMusic() {
+    for (const n of this._musicNodes) {
+      try {
+        if (n.stop) n.stop()
+        if (n.disconnect) n.disconnect()
+      } catch {}
+    }
+    this._musicNodes = []
+    this._musicPlaying = false
   }
 
   _playBuffer(name, opts) {
@@ -63,20 +135,19 @@ export class AudioEngine {
     const gain = this.ctx.createGain()
     gain.gain.value = opts.volume ?? 1
     src.connect(gain)
-    gain.connect(this.masterGain)
+    gain.connect(this.sfxGain || this.masterGain)
     src.start()
   }
 
-  // Synthèse de SFX par type
   _playSynth(name, opts = {}) {
     const ctx = this.ctx
     const now = ctx.currentTime
     const vol = opts.volume ?? 1
+    const dest = this.sfxGain || this.masterGain
 
     switch (name) {
       case 'shoot':
       case 'kick': {
-        // Bruit d'impact +whoosh
         const osc = ctx.createOscillator()
         const g = ctx.createGain()
         osc.type = 'sine'
@@ -85,13 +156,12 @@ export class AudioEngine {
         g.gain.setValueAtTime(0.5 * vol, now)
         g.gain.exponentialRampToValueAtTime(0.001, now + 0.2)
         osc.connect(g)
-        g.connect(this.masterGain)
+        g.connect(dest)
         osc.start(now)
         osc.stop(now + 0.2)
         break
       }
       case 'jutsu': {
-        // Son mystique montant
         const osc = ctx.createOscillator()
         const g = ctx.createGain()
         osc.type = 'sawtooth'
@@ -104,13 +174,12 @@ export class AudioEngine {
         filter.frequency.value = 1200
         osc.connect(filter)
         filter.connect(g)
-        g.connect(this.masterGain)
+        g.connect(dest)
         osc.start(now)
         osc.stop(now + 0.5)
         break
       }
       case 'goal': {
-        // Fanfare but
         const notes = [523, 659, 784, 1047]
         notes.forEach((freq, i) => {
           const osc = ctx.createOscillator()
@@ -121,14 +190,13 @@ export class AudioEngine {
           g.gain.setValueAtTime(0.2 * vol, t)
           g.gain.exponentialRampToValueAtTime(0.001, t + 0.3)
           osc.connect(g)
-          g.connect(this.masterGain)
+          g.connect(dest)
           osc.start(t)
           osc.stop(t + 0.3)
         })
         break
       }
       case 'whistle': {
-        // Sifflet d'arbitre
         const osc = ctx.createOscillator()
         const g = ctx.createGain()
         osc.type = 'square'
@@ -137,18 +205,16 @@ export class AudioEngine {
         g.gain.setValueAtTime(0.15 * vol, now)
         g.gain.exponentialRampToValueAtTime(0.001, now + 0.4)
         osc.connect(g)
-        g.connect(this.masterGain)
+        g.connect(dest)
         osc.start(now)
         osc.stop(now + 0.4)
         break
       }
       case 'dash': {
-        // Whoosh de dash
-        const noise = this._noiseBurst(0.2, vol * 0.3)
+        this._noiseBurst(0.2, vol * 0.3)
         break
       }
       case 'hit': {
-        // Impact
         const osc = ctx.createOscillator()
         const g = ctx.createGain()
         osc.type = 'triangle'
@@ -157,7 +223,7 @@ export class AudioEngine {
         g.gain.setValueAtTime(0.4 * vol, now)
         g.gain.exponentialRampToValueAtTime(0.001, now + 0.12)
         osc.connect(g)
-        g.connect(this.masterGain)
+        g.connect(dest)
         osc.start(now)
         osc.stop(now + 0.12)
         break
@@ -170,7 +236,7 @@ export class AudioEngine {
         g.gain.setValueAtTime(0.2 * vol, now)
         g.gain.exponentialRampToValueAtTime(0.001, now + 0.1)
         osc.connect(g)
-        g.connect(this.masterGain)
+        g.connect(dest)
         osc.start(now)
         osc.stop(now + 0.1)
         break
@@ -184,7 +250,7 @@ export class AudioEngine {
         g.gain.setValueAtTime(0.15 * vol, now)
         g.gain.exponentialRampToValueAtTime(0.001, now + 0.2)
         osc.connect(g)
-        g.connect(this.masterGain)
+        g.connect(dest)
         osc.start(now)
         osc.stop(now + 0.2)
         break
@@ -209,12 +275,13 @@ export class AudioEngine {
     g.gain.value = vol
     src.connect(filter)
     filter.connect(g)
-    g.connect(this.masterGain)
+    g.connect(this.sfxGain || this.masterGain)
     src.start()
     return src
   }
 
   dispose() {
+    this.stopMusic()
     if (this.ctx) this.ctx.close()
   }
 }
