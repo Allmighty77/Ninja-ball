@@ -1,136 +1,119 @@
-# 🎮 NINJA BALL — Ultimate Clash
+# Ninja Ball — Ultimate Clash
 
-**Fan game non commercial — Football Ninja Clash en 3D cel-shaded.**
+**Football ninja 3D** dans le navigateur — matchs rapides, combos, jutsu, 1vIA ou 2 joueurs local.
 
-Fusion de FIFA (match, score, chrono) et Naruto Storm (ninja, jutsu, chakra). Jouable au clavier ou au tactile, PWA installable.
-
-> **Fan game non commercial — Naruto © Masashi Kishimoto / Shueisha / Pierrot / Bandai Namco**
+> Fan game **non commercial** et non affilié.  
+> **Naruto © Masashi Kishimoto / Shueisha / Pierrot / Bandai Namco**
 
 ---
 
-## 🚀 Installation
+## Jouer en local
 
 ```bash
 npm install
 npm run dev
 ```
 
-Le jeu s'ouvre sur `http://localhost:5173`.
+Ouvre `http://localhost:5173`.
 
-### Build de production
+### Build production
 
 ```bash
 npm run build
 npm run preview
 ```
 
----
-
-## ✨ Nouveautés
-
-### v1.2 — Polish AAA / performances fluides
-- **Boucle de jeu** découplée + physique en **timestep fixe 60 Hz** (plus de jitter)
-- **Caméra cinématique** : damping, look-ahead sur la vitesse du ballon, FOV punch sur tirs / dash / jutsu / buts
-- **Screen shake** + feedback impact style console
-- **Cache de matériaux** toon (moins de GC)
-- **Ombres adaptatives** (désactivées auto sur machines faibles)
-- **Trail de ballon** sans allocation chaque frame
-- **Particules** optimisées (depthWrite off, dispose propre)
-- Fog exponentiel + tone mapping ACES pour un rendu plus ciné
-
-### v1.1 — Personnages + bugs
-- Personnages low-poly stylisés (corps, cheveux uniques, bandeau)
-- Bugs buts / tir / IA corrigés
+Sortie : dossier `dist/` (hébergeable sur Vercel, Netlify, GitHub Pages…).
 
 ---
 
-## 🎯 Contrôles
+## Modes de jeu
 
-### Desktop (clavier)
+| Mode | Description |
+|------|-------------|
+| **VS IA** | 1v1 contre une IA (Facile / Normal / Difficile) |
+| **2 Joueurs** | Même clavier, sélection de 2 ninjas |
 
-| Touche | Action |
-|---|---|
-| **ZQSD / WASD / Flèches** | Déplacer le ninja |
-| **Espace** | Tirer (si vous avez le ballon) / Voler le ballon (près de l'adversaire) |
-| **E** | Dash (consomme du chakra) |
-| **1 / 2 / 3** | Jutsu (chacun a un coût en chakra + un cooldown) |
-| **Shift** | Sprint |
-
-### Mobile (tactile)
-
-- **Joystick virtuel** en bas à gauche pour se déplacer
-- **Boutons** en bas à droite : TIR, DASH, J1, J2, J3
+Match de **2 minutes**. Le plus de buts gagne.
 
 ---
 
-## ⚽ Gameplay
+## Contrôles
 
-- Match **1v1** sur un stade ninja cel-shaded, chrono **2 minutes**
-- **Score style FIFA** — le ballon doit entrer dans le but adverse
-- **Jauge de chakra** (0–100) qui se régénère avec le temps
-- Chaque personnage a **3 jutsu** uniques avec coût en chakra et cooldown
-- **IA adversaire** : poursuit le ballon, dribble vers votre but, tire de près, utilise des jutsu aléatoires
-- **But = cinématique** : slow-mo + FOV punch + particules + screen shake
+### Joueur 1
+| Action | Touches |
+|--------|---------|
+| Déplacer | ZQSD / WASD |
+| Tirer / voler | Espace |
+| Dash | E |
+| Jutsu | 1 · 2 · 3 |
+| Sprint | Shift gauche |
+| Pause | Échap ou P |
 
----
+### Joueur 2 (mode 2 joueurs)
+| Action | Touches |
+|--------|---------|
+| Déplacer | Flèches |
+| Tirer / voler | Entrée |
+| Dash | Shift droit |
+| Jutsu | 7 · 8 · 9 |
 
-## 🥷 Personnages
-
-| Ninja | Couleur | Jutsu 1 | Jutsu 2 | Jutsu 3 |
-|---|---|---|---|---|
-| **Naruto Uzumaki** | Orange | Rasengan Shot | Kage Bunshin Pass | Mode Ermite (boost) |
-| **Sasuke Uchiha** | Bleu | Chidori Tackle | Katon Fireball Cross | Sharingan Read (slow-mo) |
-| **Sakura Haruno** | Rose | Cherry Blossom Strike | Soin Défense | Blossom Shot |
-| **Kakashi Hatake** | Gris | Raikiri Dash | Kamui Zone (ralentit le ballon) | Copy Technique |
-
----
-
-## 🎨 Ajouter vos propres assets
-
-### Modèles 3D `.glb`
-
-1. Placez vos fichiers `.glb` dans `public/models/`
-2. Le chargement est déjà branché dans `Match.js` (`/models/<id>.glb`)
-
-### Fichiers audio `.mp3`
-
-Placez-les dans `public/sounds/` et chargez-les via `Audio.js` (noms : `shoot`, `jutsu`, `goal`, `whistle`, `dash`, `hit`, `select`, `menu`).
+### Mobile
+Joystick virtuel + boutons TIR / DASH / J1–J3.
 
 ---
 
-## 📱 PWA
+## Progression
 
-- `public/manifest.json` — thème `#ff6b1a`
-- `public/sw.js` — cache offline
-- Icônes SVG dans `public/`
+- Stats locales (victoires, séries, combos)
+- **8 achievements** déblocables
+- Classement online optionnel (Supabase — nécessite `.env`)
 
----
-
-## 🌐 Déploiement sur Vercel
-
-```bash
-npm i -g vercel
-vercel
-```
-
-Build : `npm run build` — Output : `dist`
+Sans clés Supabase, le jeu fonctionne **entièrement offline**.
 
 ---
 
-## 🏗️ Architecture
+## Options graphiques
+
+| Preset | Usage |
+|--------|--------|
+| **Low** | Téléphones modestes, batterie |
+| **Medium** | Équilibre |
+| **High** | Desktop / tablettes puissantes |
+
+Les presets changent réellement : résolution (DPR), ombres, densité de particules, anti-aliasing.
+
+---
+
+## Architecture
 
 ```
 src/
-├── data/characters.js
-├── engine/   # Renderer, Physics, Input, Audio
-├── entities/ # Stadium, Ball, Player, Effects
-├── systems/  # AI, HUD, Match
-└── ui/screens.js
+├── data/          # personnages, progression, achievements, db
+├── engine/        # Renderer, Physics, Input, Audio, GraphicsQuality
+├── entities/      # Stadium, Ball, Player, Effects
+├── systems/       # Match, AI, HUD
+└── ui/            # écrans (titre, sélection, fin, options…)
 ```
+
+- Physique **timestep fixe 60 Hz** (Cannon-es)
+- Rendu **cel-shaded** (Three.js) + caméra cinématique
+- PWA (`manifest` + service worker)
 
 ---
 
-## ⚠️ Mention légale
+## Configuration Supabase (optionnel)
 
-**Fan game non commercial.** Non affilié aux ayants droit.  
-**Naruto © Masashi Kishimoto / Shueisha / Pierrot / Bandai Namco.**
+```bash
+cp .env.example .env
+# renseigner VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY
+```
+
+**Ne committe jamais `.env`.**
+
+---
+
+## Mentions légales
+
+Produit fan, **sans monétisation** liée à la franchise Naruto.  
+Tous les droits sur les personnages et l’univers appartiennent à leurs ayants droit.
