@@ -67,6 +67,8 @@ export class Match {
     this.paused = false
     this.onEnd = null
     this.slowMo = 1.0
+    this.introCountdown = 3.2
+    this._countdownStep = 4
 
     this.combo = 0
     this.comboTimer = 0
@@ -86,6 +88,7 @@ export class Match {
 
     this._lastTime = performance.now()
     this._running = false
+    this.hud.showCountdown(3)
     this._camTarget = new THREE.Vector3()
     this._ballVel = new THREE.Vector3()
 
@@ -193,6 +196,21 @@ export class Match {
     if (this.gameOver) return
 
     const intensity = this.timeLeft < 30 ? 1.08 : 1.0
+    if (this.introCountdown > 0) {
+      this.introCountdown = Math.max(0, this.introCountdown - dt)
+      const step = Math.ceil(this.introCountdown)
+      if (step > 0 && step < this._countdownStep) {
+        this._countdownStep = step
+        this.hud.showCountdown(step)
+      } else if (step === 0 && this._countdownStep !== 0) {
+        this._countdownStep = 0
+        this.hud.showCountdown(0)
+      }
+      this.hud.updateTimer(this.timeLeft)
+      this.renderer.updateCamera(new THREE.Vector3(0, 1.2, 0), null, dt)
+      return
+    }
+
     const effectiveDt = dt * this.slowMo * intensity
     this._effectiveDt = effectiveDt
 
