@@ -348,6 +348,16 @@ export class Player {
         this.arms[0].rotation.z = 0.5 * punch
         this.arms[1].rotation.z = -0.5 * punch
         this.chakraRing.scale.setScalar(1 + 0.3 * punch)
+      } else if (this.actionAnim === 'tackle') {
+        this.arms[0].rotation.x = -1.15 * punch
+        this.arms[1].rotation.x = -1.15 * punch
+        this.legs[0].rotation.x = -0.35 * punch
+        this.legs[1].rotation.x = 0.35 * punch
+        this.torso.rotation.z = -0.12 * punch
+      } else if (this.actionAnim === 'pass') {
+        this.arms[0].rotation.x = -0.75 * punch
+        this.arms[1].rotation.x = 0.35 * punch
+        this.torso.rotation.y = -0.18 * punch
       } else if (this.actionAnim === 'stun') {
         this.group.rotation.z = Math.sin(this.actionTime * 28) * 0.08
         this.headMesh.rotation.z = Math.sin(this.actionTime * 35) * 0.12
@@ -360,6 +370,13 @@ export class Player {
         this.actionAnim = null
         this.group.rotation.z = 0
         this.torso.rotation.y = 0
+        this.torso.rotation.z = 0
+        this.arms[0].rotation.set(0, 0, 0)
+        this.arms[1].rotation.set(0, 0, 0)
+        this.legs[0].rotation.set(0, 0, 0)
+        this.legs[1].rotation.set(0, 0, 0)
+        this.headMesh.rotation.set(0, 0, 0)
+        this.chakraRing.scale.set(1, 1, 1)
         this.group.position.y = this.position.y
       }
     }
@@ -461,6 +478,7 @@ export class Player {
     this.hasBall = false
     ball.lastOwner = this
     this.audio.play('shoot')
+    this.playActionAnimation('pass', 0.34)
     return true
   }
 
