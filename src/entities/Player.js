@@ -37,6 +37,13 @@ export class Player {
     // Animation
     this.animTime = 0
     this.isMoving = false
+    this.animState = 'idle'
+    this.animBlend = 0
+    this.actionAnim = null
+    this.actionTime = 0
+    this.actionDuration = 0
+    this.actionLock = 0
+    this.wasMoving = false
 
     // Construit le mesh
     this._buildMesh()
@@ -303,6 +310,96 @@ export class Player {
     }
   }
 
+  // Animation procédurale : idle, course, sprint, possession, tir, dash, jutsu,
+  // stun, victoire et célébration sans dépendre d'assets externes.
+  playActionAnimation(name, duration = 0.45) {
+    this.actionAnim = name
+    this.actionTime = 0
+    this.actionDuration = duration
+    this.actionLock = duration
+  }
+
+  _updateProceduralAnimation(dt) {
+    const t = this.animTime
+    const moving = this.isMoving
+    const sprinting = moving && this.velocity.length() > this.character.speed * 1.25
+    const phase = moving ? t : t * 0.65
+    const run = Math.sin(phase)
+    const run2 = Math.cos(phase)
+    const speedBlend = moving ? (sprinting ? 1.35 : 1) : 0
+
+    if (this.actionLock > 0) this.actionLock = Math.max(0, this.actionLock - dt)
+    if (this.actionAnim) {
+      this.actionTime += dt
+      const p = Math.min(1, this.actionTime / Math.max(0.001, this.actionDuration))
+      const punch = Math.sin(p * Math.PI)
+      if (this.actionAnim === 'shoot') {
+        this.arms[0].rotation.x = -1.35 * punch
+        this.arms[1].rotation.x = -0.45 * punch
+        this.torso.rotation.y = Math.sin(p * Math.PI * 2) * 0.12
+      } else if (this.actionAnim === 'dash') {
+        this.group.rotation.z = -0.12 * punch
+        this.torso.position.y = 1.55 - 0.18 * punch
+        this.arms[0].rotation.x = -0.9 * punch
+        this.arms[1].rotation.x = -0.9 * punch
+      } else if (this.actionAnim === 'jutsu') {
+        this.arms[0].rotation.x = -1.0 * punch
+        this.arms[1].rotation.x = -1.0 * punch
+        this.arms[0].rotation.z = 0.5 * punch
+        this.arms[1].rotation.z = -0.5 * punch
+        this.chakraRing.scale.setScalar(1 + 0.3 * punch)
+      } else if (this.actionAnim === 'tackle') {
+        this.arms[0].rotation.x = -1.15 * punch
+        this.arms[1].rotation.x = -1.15 * punch
+        this.legs[0].rotation.x = -0.35 * punch
+        this.legs[1].rotation.x = 0.35 * punch
+        this.torso.rotation.z = -0.12 * punch
+      } else if (this.actionAnim === 'pass') {
+        this.arms[0].rotation.x = -0.75 * punch
+        this.arms[1].rotation.x = 0.35 * punch
+        this.torso.rotation.y = -0.18 * punch
+      } else if (this.actionAnim === 'stun') {
+        this.group.rotation.z = Math.sin(this.actionTime * 28) * 0.08
+        this.headMesh.rotation.z = Math.sin(this.actionTime * 35) * 0.12
+      } else if (this.actionAnim === 'celebrate') {
+        this.arms[0].rotation.z = -1.2 * punch
+        this.arms[1].rotation.z = 1.2 * punch
+        this.group.position.y = this.position.y + 0.3 * Math.sin(p * Math.PI)
+      }
+      if (this.actionTime >= this.actionDuration) {
+        this.actionAnim = null
+        this.group.rotation.z = 0
+        this.torso.rotation.y = 0
+        this.torso.rotation.z = 0
+        this.arms[0].rotation.set(0, 0, 0)
+        this.arms[1].rotation.set(0, 0, 0)
+        this.legs[0].rotation.set(0, 0, 0)
+        this.legs[1].rotation.set(0, 0, 0)
+        this.headMesh.rotation.set(0, 0, 0)
+        this.chakraRing.scale.set(1, 1, 1)
+        this.group.position.y = this.position.y
+      }
+    }
+
+    if (!this.actionAnim) {
+      const swing = run * (moving ? 0.55 * speedBlend : 0.06)
+      const armSwing = run * (moving ? 0.42 * speedBlend : 0.04)
+      this.legs[0].rotation.x = swing
+      this.legs[1].rotation.x = -swing
+      this.arms[0].rotation.x = -armSwing
+      this.arms[1].rotation.x = armSwing
+      this.torso.position.y = 1.55 + Math.abs(run2) * (moving ? 0.07 : 0.018)
+      this.torso.rotation.z = moving ? -run * 0.035 * speedBlend : 0
+      this.headMesh.rotation.z = moving ? run * 0.025 : 0
+    }
+
+    // Petit flottement du bandeau/cheveux pour donner de la vie au personnage.
+    if (this.hairGroup) {
+      this.hairGroup.rotation.z = Math.sin(t * 1.7) * (moving ? 0.025 : 0.012)
+      this.hairGroup.position.x = Math.sin(t * 2.1) * 0.008
+    }
+  }
+
   // Déplacement
   move(dir, dt, sprint = false) {
     if (this.stunned > 0) return
@@ -366,6 +463,7 @@ export class Player {
     this.hasBall = false
     ball.lastOwner = this
     this.audio.play('shoot')
+    this.playActionAnimation('shoot', 0.42)
     this.effects.spawnImpact(ball.position.clone(), this.character.color)
     this.renderer.addShake(0.3)
     return true
@@ -380,6 +478,7 @@ export class Player {
     this.hasBall = false
     ball.lastOwner = this
     this.audio.play('shoot')
+    this.playActionAnimation('pass', 0.34)
     return true
   }
 
@@ -397,6 +496,7 @@ export class Player {
     this.position.z = Math.max(-limZ, Math.min(limZ, this.position.z))
     this.group.position.copy(this.position)
     this.audio.play('dash')
+    this.playActionAnimation('dash', 0.28)
     this.effects.spawnDashTrail(this.position.clone(), this.character.color, dir)
     return true
   }
@@ -410,6 +510,7 @@ export class Player {
     this.chakra -= jutsu.cost
     this.cooldowns[index] = jutsu.cooldown
     this.audio.play('jutsu')
+    this.playActionAnimation('jutsu', 0.55)
 
     // Sceau au sol
     const sealTick = this.stadium.spawnSeal(this.position.clone(), this.character.color, 1.5)
@@ -495,27 +596,17 @@ export class Player {
     }
 
     // Timers d'effets
-    if (this.stunned > 0) this.stunned -= dt
+    if (this.stunned > 0) {
+      this.stunned -= dt
+      if (!this.actionAnim) this.playActionAnimation('stun', 0.25)
+    }
     if (this.boostTime > 0) this.boostTime -= dt
     if (this.slowMoTime > 0) this.slowMoTime -= dt
     if (this.healTime > 0) this.healTime -= dt
 
-    // Animation de course / idle
+    // Animation procédurale idle/course/sprint + actions contextuelles.
     this.animTime += dt * (this.isMoving ? 10 : 3)
-    if (this.legs && this.legs.length === 2) {
-      const swing = Math.sin(this.animTime) * (this.isMoving ? 0.55 : 0.08)
-      this.legs[0].rotation.x = swing
-      this.legs[1].rotation.x = -swing
-      if (this.arms && this.arms.length === 2) {
-        this.arms[0].rotation.x = -swing * 0.7
-        this.arms[1].rotation.x = swing * 0.7
-      }
-    }
-
-    // Légère bob du torso
-    if (this.torso) {
-      this.torso.position.y = 1.55 + Math.abs(Math.sin(this.animTime * 0.5)) * (this.isMoving ? 0.06 : 0.02)
-    }
+    this._updateProceduralAnimation(dt)
 
     // Anneau de chakra pulsant
     const ringPulse = 1 + Math.sin(performance.now() * 0.004) * 0.12
