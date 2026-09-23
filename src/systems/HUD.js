@@ -10,6 +10,7 @@ export class HUD {
     this._buildChakraGauge()
     this._buildJutsuButtons()
     this._buildCombo()
+    this._buildCountdown()
     this._buildMobileControls()
     this._buildGoalOverlay()
     this._buildPauseOverlay()
@@ -90,6 +91,44 @@ export class HUD {
       pointer-events:none; letter-spacing:2px; z-index:20;
     `
     this.root.appendChild(this.comboEl)
+  }
+
+  _buildCountdown() {
+    this.countdownEl = document.createElement('div')
+    this.countdownEl.className = 'match-countdown'
+    this.countdownEl.style.cssText = `
+      position:absolute; inset:0; z-index:45; display:flex; align-items:center;
+      justify-content:center; pointer-events:none; opacity:0; transform:scale(.7);
+      font-family:var(--font-display); font-size:clamp(5rem,18vw,11rem);
+      font-weight:900; letter-spacing:8px; color:#fff;
+      text-shadow:0 0 20px rgba(255,107,26,.9),0 8px 30px rgba(0,0,0,.8);
+      transition:opacity .15s ease, transform .15s ease;
+    `
+    this.root.appendChild(this.countdownEl)
+  }
+
+  showCountdown(value) {
+    if (!this.countdownEl) return
+    if (value > 0) {
+      this.countdownEl.textContent = String(value)
+      this.countdownEl.style.opacity = '1'
+      this.countdownEl.style.transform = 'scale(1)'
+      clearTimeout(this._countdownTimer)
+      this._countdownTimer = setTimeout(() => {
+        if (this.countdownEl) {
+          this.countdownEl.style.opacity = '0'
+          this.countdownEl.style.transform = 'scale(1.25)'
+        }
+      }, 650)
+    } else {
+      this.countdownEl.textContent = 'GO!'
+      this.countdownEl.style.opacity = '1'
+      this.countdownEl.style.transform = 'scale(1)'
+      clearTimeout(this._countdownTimer)
+      this._countdownTimer = setTimeout(() => {
+        if (this.countdownEl) this.countdownEl.style.opacity = '0'
+      }, 550)
+    }
   }
 
   _buildMobileControls() {
@@ -189,12 +228,17 @@ export class HUD {
     const el = document.getElementById('sbTimer')
     if (!el) return
     el.textContent = `${m}:${s.toString().padStart(2, '0')}`
-    if (seconds < 30) {
+    if (seconds <= 10) {
+      el.style.color = '#ff2222'
+      el.style.textShadow = '0 0 14px #ff0000'
+      el.style.transform = 'scale(1.08)'
+    } else if (seconds < 30) {
       el.style.color = '#ff3333'
       el.style.textShadow = '0 0 10px #ff0000'
     } else {
       el.style.color = '#ffffff'
       el.style.textShadow = ''
+      el.style.transform = ''
     }
   }
 
