@@ -157,6 +157,8 @@ export class Match {
             this._addCombo(2)
           }
           this.audio.play('hit')
+          pl.playActionAnimation('tackle', 0.32)
+          opponent.playActionAnimation('stun', 0.8)
           pl.effects.spawnBurst(opponent.position.clone(), 0xffff00, 18)
           this.renderer.addShake(0.45)
           this.renderer.punchFOV(4)
@@ -335,6 +337,11 @@ export class Match {
     this.renderer.punchFOV(12)
     this.slowMo = 0.15
 
+    const scorer = scorerSide === 0 ? this.player : this.aiPlayer
+    const conceded = scorerSide === 0 ? this.aiPlayer : this.player
+    scorer.playActionAnimation('celebrate', 2.2)
+    conceded.playActionAnimation('stun', 1.1)
+
     this.player.effects.spawnGoalEffect(
       new THREE.Vector3(this.ball.position.x, this.ball.position.y, this.ball.position.z),
     )
@@ -363,6 +370,8 @@ export class Match {
   _endMatch() {
     this.gameOver = true
     this.audio.play('whistle')
+    this.player.playActionAnimation('celebrate', 2.4)
+    this.aiPlayer.playActionAnimation('celebrate', 2.4)
     try {
       this.audio.stopMusic()
     } catch {}
